@@ -7,8 +7,10 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 usage() {
-    echo "Использование: $(basename "$0") <IMAGE[:TAG]> <TARGET_DIR>"
-    echo "Пример: $(basename "$0") alpine /opt/alpine"
+    echo "Usage: $(basename "$0") <IMAGE[:TAG]> <TARGET_DIR>"
+    echo ""
+    echo "$(basename "$0") fetch Docker images from Docker Hub and extract their rootfs."
+    echo "Example: $(basename "$0") alpine /var/lib/machines/alpine"
     exit 1
 }
 
