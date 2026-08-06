@@ -3,9 +3,8 @@
 VirtualEthernet=yes
 
 # Проброс портов
-Port=tcp:8080:80
-Port=tcp:4443:443
-Port=udp:5000:5000
+# Port=tcp:8080:80
+# Port=tcp:4443:443
 
 [Files]
 # Проброс конфига DNS в режиме Read-Only
@@ -16,9 +15,9 @@ BindReadOnly=/etc/resolv.conf
 Boot=no
 
 # Перенесенные ограничения ресурсов
-LimitMEMORY=2G
-CPUQuota=50%
+# LimitMEMORY=2G
+# CPUQuota=50%
 
 # Программа, запускаемая при старте контейнера
-Parameters=/bin/sleep infinity
 # Parameters=/entrypoint.sh
+Parameters=/bin/sleep infinity
