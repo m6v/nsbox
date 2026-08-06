@@ -7,10 +7,6 @@ Type=simple
 
 Environment="STORAGE_ROOT=/var/lib/nspawn"
 
-# Навешиваем динамические лимиты из переменных окружения
-MemoryMax=2G
-CPUQuota=50%
-
 # Размонтирование и очистка на случай старта после нештатной остановки
 ExecStartPre=-/usr/bin/umount -l ${STORAGE_ROOT}/%i/merged
 ExecStartPre=-/usr/bin/umount -l ${STORAGE_ROOT}/%i/lower
