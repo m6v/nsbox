@@ -1,0 +1,52 @@
+# These are some examples of commonly ignored file patterns.
+# You should customize this list as applicable to your project.
+# Learn more about .gitignore:
+#     https://www.atlassian.com/git/tutorials/saving-changes/gitignore
+
+# Compiled Python bytecode
+*.py[cod]
+__pycache__/
+
+# Virtual environment
+venv/
+
+# Log files
+*.log
+
+# Archive files
+*.tar.gz
+
+# Deb packages
+*.deb
+
+# pyinstaller
+build/
+dist/
+main.spec
+
+# Geany projects
+*.geany
+
+# Kate retry
+*.retry
+
+# Large media files
+*.mp4
+*.tiff
+*.avi
+*.flv
+*.mov
+*.wmv
+
+# QEMU Copy-On-Write files
+*.qcow2
+
+# ISO files
+*.iso
+
+# Temporary files
+tmp/
+*.tmp
+
+# Backup files
+*.bak

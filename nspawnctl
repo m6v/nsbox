@@ -1,0 +1,161 @@
+#!/bin/sh
+
+set -eu
+
+# Шаблон systemd-юнита
+SERVICE_TEMPLATE="nspawn@"
+
+STORAGE_ROOT=/var/lib/nspawn
+
+# Автоматический перезапуск от root через sudo, если запущен от обычного пользователя
+if [ "$(id -u)" -ne 0 ]; then
+    exec sudo "$0" "$@"
+fi
+
+usage() {
+    cat << EOF
+Использование: $(basename "$0") <команда> [АРГУМЕНТЫ...]
+
+$(basename "$0") — это легковесный инструмент для управления контейнерами systemd-nspawn 
+
+Команды:
+  list                   Вывести список запущенных контейнеров и юнитов
+  start <container>      Запустить контейнер
+  stop  <container>      Остановить контейнер
+  restart <container>    Перезапустить контейнер
+  exec <container> [cmd] Выполнить cmd в контейнере (по умолчанию /bin/sh)
+  show <container>       Показать статус контейнера и юнита
+  log <container>        Вывести логи службы контейнера
+  destroy <container>    Уничтожить контейнер (удалить ${STORAGE_ROOT}/<container>)
+  help                   Показать эту справку и выйти
+EOF
+    exit 1
+}
+
+list() {
+    machinectl list 2>/dev/null || echo " (нет запущенных)"
+    echo ""
+    systemctl list-units "${SERVICE_TEMPLATE}*" --no-legend --all --no-pager
+}
+
+start() {
+    name="$1"
+
+    # Проверяем, запущен ли контейнер
+    if machinectl show "$name" >/dev/null 2>&1; then
+        echo "Контейнер '${name}' уже запущен."
+        return 0
+    fi
+
+    echo "Запуск контейнера '${name}'..."
+    systemctl start "${SERVICE_TEMPLATE}${name}.service"
+    echo "Готово."
+}
+
+stop() {
+    name="$1"
+
+    # Проверяем, запущен ли контейнер
+    if ! machinectl show "$name" >/dev/null 2>&1; then
+        echo "Контейнер '${name}' уже остановлен (или не был запущен)."
+        return 0
+    fi
+
+    echo "Остановка контейнера '${name}'..."
+    systemctl stop "${SERVICE_TEMPLATE}${name}.service"
+    echo "Готово."
+}
+
+restart() {
+    name="$1"
+    echo "Перезапуск контейнера '${name}'..."
+    systemctl restart "${SERVICE_TEMPLATE}${name}.service"
+    echo "Готово."
+}
+
+execute() {
+    name="$1"
+    shift
+
+    # Получение PID главного процесса контейнера через machinectl или systemctl
+    pid=$(machinectl show "$name" -p Leader --value 2>/dev/null || true)
+
+    if [ -z "$pid" ] || [ "$pid" -eq 0 ]; then
+        echo "Ошибка: Контейнер '$name' не запущен или не найден PID главного процесса." >&2
+        exit 1
+    fi
+
+    # Если команда не передана, запускаем /bin/sh (параметр -l необязательный, но если указан,
+    # заставляет оболочку запуститься в режиме шелла входа (login shell) с настройкой окружения)
+    if [ $# -eq 0 ]; then set -- /bin/sh -l; fi
+
+    exec nsenter --target "$pid" --mount --uts --ipc --net --pid -- \
+        env -i \
+        TERM="${TERM:-xterm-256color}" \
+        PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+        HOME="/root" \
+        "$@"
+}
+
+show() {
+    name="$1"
+    systemctl status "${SERVICE_TEMPLATE}${name}.service" --no-pager -n 0 || true
+    echo ""
+    if machinectl show "$name" >/dev/null 2>&1; then
+        machinectl status "$name" --no-pager
+    else
+        echo "Контейнер '$name' не зарегистрирован в machined (выключен)"
+    fi
+}
+
+destroy() {
+    name="$1"
+
+    # Проверяем, запущен ли контейнер в machined
+    if machinectl show "$name" >/dev/null 2>&1; then
+        echo "Ошибка: Контейнер '$name' сейчас запущен!" >&2
+        echo "Остановите его перед удалением: nspawnctl stop $name" >&2
+        exit 1
+    fi
+
+    container_dir="${STORAGE_ROOT}/$name"
+    echo "Контейнер '$name' не запущен. Проверка каталога $container_dir..."
+
+    if [ -d "$container_dir" ]; then
+        echo "Удаление $container_dir..."
+        rm -rf "$container_dir"
+        echo "Контейнер успешно удален"
+    else
+        echo "Каталог $container_dir не найден"
+    fi
+}
+
+log() {
+    name="${1:-*}"
+    journalctl -u systemd-nspawn@"$name" --no-pager
+}
+
+# Проверка минимального количества аргументов
+if [ $# -lt 1 ]; then
+    usage
+fi
+
+ACTION="$1"
+shift
+# Синонимы команд
+[ "$ACTION" = "exec" ] && ACTION="execute"
+[ "$ACTION" = "help" ] && ACTION="usage"
+
+case "$ACTION" in
+    list|start|stop|restart|execute|show|destroy|log|usage) ;;
+    *)
+        echo "Ошибка: неизвестная команда '$ACTION'" >&2
+        usage ;;
+esac
+
+# Проверка наличия имени контейнера для всех команд, кроме list
+if [ "$ACTION" != "list" ] && [ $# -lt 1 ]; then
+    usage
+fi
+
+"$ACTION" "$@"

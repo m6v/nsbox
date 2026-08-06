@@ -1,0 +1,19 @@
+# /etc/systemd/network/10-nspawn-veth.conf
+
+[Match]
+Name=ve-*
+
+[Network]
+# IP хоста (шлюза) для всех контейнеров
+Address=192.168.100.1/24
+# Настройка маскарадинга и форвардинга пакетов
+IPMasquerade=ipv4
+IPv4Forwarding=yes
+
+# Включение встроенного DHCP-сервера
+DHCPServer=yes
+
+[DHCPServer]
+# Определение пула динамических IP-адресов
+PoolOffset=100
+PoolSize=150
