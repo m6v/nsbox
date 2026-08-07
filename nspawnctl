@@ -20,6 +20,7 @@ $(basename "$0") — это легковесный инструмент для �
 
 Команды:
   list                   Вывести список запущенных контейнеров и юнитов
+  create <container>     Создать контейнер
   start <container>      Запустить контейнер
   stop  <container>      Остановить контейнер
   restart <container>    Перезапустить контейнер
@@ -38,9 +39,43 @@ list() {
     systemctl list-units "${SERVICE_TEMPLATE}*" --no-legend --all --no-pager
 }
 
-start() {
+create() {
     name="$1"
 
+    mkdir -p "${STORAGE_ROOT}/$name/lower"
+    if [ ! -f /etc/systemd/nspawn/${name}.nspawn ]; then
+        cat << EOF > /etc/systemd/nspawn/${name}.nspawn
+[Network]
+# Тип сети
+VirtualEthernet=yes
+
+# Проброс портов
+# Port=tcp:8080:80
+# Port=tcp:4443:443
+
+[Files]
+# Проброс конфига DNS в режиме Read-Only
+BindReadOnly=/etc/resolv.conf
+
+[Exec]
+# Вариант загрузки
+Boot=no
+
+# Перенесенные ограничения ресурсов
+# LimitMEMORY=2G
+# CPUQuota=50%
+
+# Программа, запускаемая при старте контейнера
+# Parameters=/entrypoint.sh
+Parameters=/bin/sleep infinity
+EOF
+        mkdir -p "${STORAGE_ROOT}/$name/lower"
+    fi
+
+}
+
+start() {
+    name="$1"
     # Проверяем, запущен ли контейнер
     if machinectl show "$name" >/dev/null 2>&1; then
         echo "Контейнер '${name}' уже запущен."
@@ -54,7 +89,6 @@ start() {
 
 stop() {
     name="$1"
-
     # Проверяем, запущен ли контейнер
     if ! machinectl show "$name" >/dev/null 2>&1; then
         echo "Контейнер '${name}' уже остановлен (или не был запущен)."
@@ -110,7 +144,6 @@ show() {
 
 destroy() {
     name="$1"
-
     # Проверяем, запущен ли контейнер в machined
     if machinectl show "$name" >/dev/null 2>&1; then
         echo "Ошибка: Контейнер '$name' сейчас запущен!" >&2
@@ -147,7 +180,7 @@ shift
 [ "$ACTION" = "help" ] && ACTION="usage"
 
 case "$ACTION" in
-    list|start|stop|restart|execute|show|destroy|log|usage) ;;
+    list|create|start|stop|restart|execute|show|destroy|log|usage) ;;
     *)
         echo "Ошибка: неизвестная команда '$ACTION'" >&2
         usage ;;
