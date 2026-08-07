@@ -1,15 +1,62 @@
 #!/usr/bin/env python3
-import os, sys, json, shutil, platform, subprocess, warnings, argparse, tarfile
+import os, sys, json, shutil, platform, subprocess, warnings, argparse, tarfile, urllib.request, urllib.parse, base64
 
-# Подавление DeprecationWarning для совместимости (3.7 - 3.14)
+# DeprecationWarning disabled for Python 3.7 - 3.14 compatibility
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+def get_auth_params(registry_url, repo, username=None, password=None):
+    """
+    Делает предзапрос к реестру, чтобы узнать точный URL сервера авторизации (Auth Discovery)
+    и тип поддерживаемой авторизации (Bearer или Basic).
+    """
+    url = f"https://{registry_url}/v2/{repo}/manifests/latest"
+    req = urllib.request.Request(url)
+    req.add_header("User-Agent", "Docker-Client/24.0.7 (linux)")
+    
+    # Если переданы учетные данные, пробуем подставить их сразу на случай Basic Auth
+    if username and password:
+        creds = base64.b64encode(f"{username}:{password}".encode()).decode()
+        req.add_header("Authorization", f"Basic {creds}")
+        
+    try:
+        with urllib.request.urlopen(req) as r:
+            # Если запрос прошел успешно с Basic Auth, токен не нужен
+            if username and password:
+                return "basic", None, None, None
+            return "anonymous", None, None, None
+    except urllib.error.HTTPError as e:
+        auth_header = e.headers.get("Www-Authenticate")
+        if not auth_header:
+            return "anonymous", None, None, None
+        
+        # Если реестр отвечает Bearer, парсим параметры токен-сервера
+        if auth_header.startswith("Bearer "):
+            params = {}
+            parts = auth_header[7:].split(",")
+            for part in parts:
+                if "=" in part:
+                    k, v = part.split("=", 1)
+                    params[k.strip()] = v.strip('"')
+            
+            scope = params.get("scope", f"repository:{repo}:pull")
+            return "bearer", params.get("realm"), params.get("service"), scope
+            
+        # Если реестр явно требует Basic Auth
+        elif auth_header.startswith("Basic "):
+            return "basic", None, None, None
+            
+    except Exception:
+        pass
+    return "anonymous", None, None, None
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Fetch Docker images, cache layers, and extract rootfs with full xattrs support."
+        description="Fetch Docker/OCI images from any public or private registry, cache layers, and extract rootfs."
     )
-    parser.add_argument("image", help="Имя образа (например, alpine:latest)")
+    parser.add_argument("image", help="Имя образа (например, alpine:latest, quay.io/username/private-image:1.0)")
     parser.add_argument("target_dir", help="Целевой каталог для rootfs")
+    parser.add_argument("-u", "--user", help="Имя пользователя для авторизации в реестре", default=None)
+    parser.add_argument("-p", "--password", help="Пароль или токен доступа (Token/PAT) для авторизации", default=None)
     args = parser.parse_args()
     
     if os.geteuid() != 0:
@@ -18,87 +65,125 @@ def main():
 
     image_arg = args.image
     target_dir = os.path.abspath(args.target_dir)
+    username = args.user
+    password = args.password
 
+    # Выделяем тег
     if ":" in image_arg:
-        name, tag = image_arg.split(":", 1)
+        image_part, tag = image_arg.split(":", 1)
     else:
-        name, tag = image_arg, "latest"
+        image_part, tag = image_arg, "latest"
 
-    repo = "library/" + name if "/" not in name else name
+    # Определяем хост реестра
+    parts = image_part.split("/", 1)
+    if len(parts) > 1 and ("." in parts[0] or ":" in parts[0] or parts[0] == "localhost"):
+        registry_host = parts[0]
+        repo = parts[1]
+    else:
+        registry_host = "registry-1.docker.io"
+        repo = "library/" + image_part if "/" not in image_part else image_part
+
     arch = "amd64" if platform.machine() == "x86_64" else "arm64" if platform.machine() == "aarch64" else platform.machine()
 
-    print("Получение токена и манифеста...")
-    auth_host = bytes.fromhex("68747470733a2f2f617574682e646f636b65722e696f2f746f6b656e").decode()
-    manifest_host = bytes.fromhex("68747470733a2f2f72656769737472792d312e646f636b65722e696f2f76322f").decode()
+    print(f"Анализ реестра {registry_host}...")
+    
+    # Динамическое обнаружение типа авторизации
+    auth_type, realm, service, scope = get_auth_params(registry_host, repo, username, password)
+    
+    # Готовим базовые аргументы авторизации для curl
+    curl_auth_args = []
+    
+    if auth_type == "bearer" and realm:
+        print(f"Получение временного токена с сервера {realm}...")
+        query = urllib.parse.urlencode({"service": service, "scope": scope}, safe="/:")
+        auth_url = f"{realm}?{query}"
+        
+        cmd_auth = ["curl", "-s", "-L", "-H", "User-Agent: Docker-Client/24.0.7 (linux)"]
+        # Если переданы логин/пароль, передаем их серверу токенов через Basic Auth
+        if username and password:
+            cmd_auth.extend(["-u", f"{username}:{password}"])
+        cmd_auth.append(auth_url)
+        
+        try:
+            auth_res = subprocess.check_output(cmd_auth, text=True)
+            token = json.loads(auth_res).get("token") or json.loads(auth_res).get("access_token")
+            if token:
+                curl_auth_args = ["-H", f"Authorization: Bearer {token}"]
+        except Exception as e:
+            print(f"Ошибка получения токена: {e}. Попытка продолжить анонимно...")
+            
+    elif auth_type == "basic" and username and password:
+        print("Использование прямой Basic-авторизации для каждого запроса...")
+        curl_auth_args = ["-u", f"{username}:{password}"]
 
-    auth_query = "service=registry.docker.io&scope=repository:" + repo + ":pull"
-    auth_url = auth_host + "?" + auth_query
-
-    cmd_auth = ["curl", "-s", "-L", "-H", "User-Agent: Docker-Client/24.0.7 (linux)", auth_url]
-    auth_res = subprocess.check_output(cmd_auth, text=True)
-    token = json.loads(auth_res)["token"]
-
-    manifest_url = manifest_host + repo + "/manifests/" + tag
+    # Запрос манифеста
+    print("Запрос манифеста образа...")
+    manifest_url = f"https://{registry_host}/v2/{repo}/manifests/{tag}"
+    
     cmd_manifest = [
-        "curl", "-s", "-L", "-H", "User-Agent: Docker-Client/24.0.7 (linux)",
-        "-H", "Authorization: Bearer " + token,
-        "-H", "Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json",
-        manifest_url
+        "curl", "-s", "-L",
+        "-H", "User-Agent: Docker-Client/24.0.7 (linux)",
+        "-H", "Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json"
     ]
+    cmd_manifest.extend(curl_auth_args)
+    cmd_manifest.append(manifest_url)
+
     manifest_res = subprocess.check_output(cmd_manifest, text=True)
     res = json.loads(manifest_res)
 
     if "manifests" in res:
         digest = next(m["digest"] for m in res["manifests"] if m.get("platform", {}).get("architecture") == arch)
-        arch_url = manifest_host + repo + "/manifests/" + digest
+        arch_url = f"https://{registry_host}/v2/{repo}/manifests/{digest}"
         cmd_manifest[-1] = arch_url
         manifest_res = subprocess.check_output(cmd_manifest, text=True)
         res = json.loads(manifest_res)
 
-    layers = [l["digest"] for l in res["layers"]]
+    layer_keys = ["layers", "fsLayers"]
+    active_key = next((k for k in layer_keys if k in res), None)
+    if not active_key:
+        print(f"Ошибка: Не удалось найти слои в манифесте. Ответ сервера: {res}")
+        sys.exit(1)
+        
+    layers = [l.get("digest") or l.get("blobSum") for l in res[active_key]]
 
-    # --- СТАРТ ПРОМЫШЛЕННОГО КЭШИРОВАНИЯ ---
+    # Скачивание слоев в кэш
     os.makedirs(target_dir, exist_ok=True)
     cache_dir = os.path.join(target_dir, ".cache_layers")
     os.makedirs(cache_dir, exist_ok=True)
 
     cached_files = []
-    
-    # Этап 1: Сначала только скачиваем все слои в кэш
     print(f"Скачивание {len(layers)} слоев в кэш...")
     for idx, digest in enumerate(layers, 1):
-        print(f"Загрузка [{idx}/{len(layers)}] -> {digest[7:19]}.tar.gz")
-        blob_url = manifest_host + repo + "/blobs/" + digest
-        layer_file = os.path.join(cache_dir, f"{idx}_{digest[7:19]}.tar.gz")
+        clean_digest = digest.split(":")[-1]
+        print(f"Загрузка [{idx}/{len(layers)}] -> {clean_digest[:12]}.tar.gz")
+        blob_url = f"https://{registry_host}/v2/{repo}/blobs/{digest}"
+        layer_file = os.path.join(cache_dir, f"{idx}_{clean_digest[:12]}.tar.gz")
         
-        # Убран флаг "-s", добавлен "-S" для вывода таблицы прогресса и ошибок
         cmd_blob = [
             "curl", "-L", "-S",
             "-H", "User-Agent: Docker-Client/24.0.7 (linux)",
-            "-H", "Authorization: Bearer " + token,
-            "-o", layer_file, blob_url
+            "-o", layer_file
         ]
+        cmd_blob.extend(curl_auth_args)
+        cmd_blob.append(blob_url)
+        
         subprocess.run(cmd_blob, check=True)
         cached_files.append(layer_file)
 
-    # Этап 2: Послойная высокоэффективная распаковка
+    # Послойная обработка и извлечение слоев
     print("Распаковка и OCI-процессинг слоев...")
     for layer_file in cached_files:
-        
-        # Высокоэффективный поиск whiteout-файлов ДО распаковки слоя (анализ оглавления архива)
         with tarfile.open(layer_file, mode="r|gz") as tar:
             for member in tar:
                 basename = os.path.basename(member.name)
                 dirname = os.path.dirname(member.name)
                 
-                # 1. Точечный Explicit Whiteout (.wh.filename)
                 if basename.startswith(".wh.") and basename != ".wh..wh..opq":
                     real_name = basename[4:]
                     to_delete = os.path.join(target_dir, dirname, real_name)
                     if os.path.exists(to_delete) or os.path.islink(to_delete):
                         shutil.rmtree(to_delete) if os.path.isdir(to_delete) and not os.path.islink(to_delete) else os.remove(to_delete)
                         
-                # 2. Точечный Opaque Whiteout (.wh..wh..opq)
                 elif basename == ".wh..wh..opq":
                     opaque_dir = os.path.join(target_dir, dirname)
                     if os.path.exists(opaque_dir):
@@ -106,21 +191,18 @@ def main():
                             item_path = os.path.join(opaque_dir, item)
                             shutil.rmtree(item_path) if os.path.isdir(item_path) and not os.path.islink(item_path) else os.remove(item_path)
 
-        # Накатываем слой через системный tar (сохраняя xattrs и разрешая жесткие ссылки)
-        # Так как файлы кэшированы локально, tar отработает мгновенно и без сетевых сбоев
         cmd_tar = ["tar", "--xattrs", "--xattrs-include=*", "-xzf", layer_file, "-C", target_dir]
         subprocess.run(cmd_tar, check=True)
 
-    # Этап 3: Финальная зачистка самих маркеров удаления с диска (теперь это секундная операция)
+    # Финальная очистка самих маркеров удаления с диска
     for root, dirs, files in os.walk(target_dir):
         for f in files:
             if f.startswith(".wh."):
                 os.remove(os.path.join(root, f))
 
-    # Удаляем папку кэша
     shutil.rmtree(cache_dir)
 
-    # Создание необходимых точек монтирования для systemd-nspawn
+    # Подготовка точек монтирования для systemd-nspawn
     print("Подготовка точек монтирования для systemd-nspawn...")
     for mp in ["proc", "sys", "dev", "run", "tmp"]:
         os.makedirs(os.path.join(target_dir, mp), exist_ok=True)

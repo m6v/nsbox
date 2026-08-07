@@ -229,6 +229,41 @@ echo "<h1>Hello world!</h1>" > /var/www/localhost/htdocs/index.html
 httpd -h /var/www/localhost/htdocs -p 80
 ```
 
+6. Полноценный запуск со средой инициазции
+
+Зайдите в контейнер в режиме chroot, выполнив команду
+```
+systemd-nspawn -D /var/lib/machines/alpine /bin/sh
+```
+Подготовка контейнера к полноценной загрузке
+```
+# Обновляем репозитории и ставим менеджер инициализации
+apk update
+apk add openrc
+# Разрешаем запуск служб в контейнерах (отключаем прямую работу с железом)
+sed -i 's/#rc_sys=""/rc_sys="nspawn"/' /etc/rc.conf
+Сбрасываем пароль root (делаем его пустым)
+sed -i 's/^root:[^:]*:/root::/' /etc/shadow
+# Добавляем виртуальные терминалы в разрешенные для входа root
+for i in 0 1 2 3 4; do echo "pts/$i" >> /etc/securetty; done
+echo "console" >> /etc/securetty
+# Комментируем строки, отвечающие за запуск консолей
+sed -i 's/^\(tty[0-9].*getty\)/#\1/g' /etc/inittab
+# Добавляем универсальную строку для контейнеров, которая привяжет вход к /dev/console
+sed -i '/#.*getty/a console::respawn:/sbin/getty 38400 console' /etc/inittab
+```
+
+Полноценная загрузка ОС
+```
+systemd-nspawn -D /tmp/alpine -b
+```
+
+7. Микро Alpine (13MB)
+Если нужен минимальный образ для тестов, можно собрать микро-ОС самостоятельно прямо из sh Alpine
+```
+mkdir -p /opt/micro_rootfs
+apk add --root /opt/micro_rootfs --initdb --repositories-file /etc/apk/repositories --allow-untrusted alpine-baselayout alpine-keys alpine-release apk-tools busybox openrc
+```
 
 ### Окружение debootstrap
 >TODO Добавить сюда краткое описание
