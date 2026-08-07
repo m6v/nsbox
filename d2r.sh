@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Автоматический перезапуск от имени root/sudo, если скрипт запущен от обычного пользователя
+# Автоматический перезапуск от root'а, если скрипт запущен от обычного пользователя
 if [ "$EUID" -ne 0 ]; then
     exec sudo "$0" "$@"
 fi
@@ -26,7 +26,7 @@ IFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
 
 if [ -n "$IFACE" ]; then
     OLD_MTU=$(ip link show "$IFACE" | grep -oP 'mtu \K\d+' 2>/dev/null || echo 1500)
-    
+   
     # Автоматический возврат прежнего MTU при выходе из скрипта или ошибке
     trap 'ip link set dev "$IFACE" mtu "$OLD_MTU" 2>/dev/null || true; rm -rf "$TMP_DIR" 2>/dev/null || true' EXIT
     
@@ -128,6 +128,29 @@ for digest in $LAYERS; do
     fi
     
     tar -xzf "$TMP_DIR/layer.tar.gz" -C "$TARGET_DIR"
+done
+
+echo "Очистка whiteout-файлов и удаление стертых данных..."
+cd "$TARGET_DIR"
+
+# Поиск всех файлов, начинающиеся на .wh. (но не .wh..wh.)
+find . -type f -name ".wh.*" ! -name ".wh..wh.*" | while read -r wh_file; do
+    # Нахождение имени оригинального файла, который должен быть удален
+    orig_file=$(echo "$wh_file" | sed 's/\/\.wh\./\//')
+    
+    # Удаление оригинальныого файла/папкуи, если они существуют
+    if [ -e "$orig_file" ] || [ -L "$orig_file" ]; then
+        rm -rf "$orig_file"
+    fi
+    # Удаление маркера
+    rm -f "$wh_file"
+done
+
+# Обрабаотка маркеров непрозрачности каталогов (.wh..wh..opq)
+# Этот маркер означает, что все файлы в текущей папке из нижних слоев должны быть скрыты
+find . -type f -name ".wh..wh..opq" | while read -r opq_file; do
+    # В простом скрипте без честного отслеживания слоев мы просто удаляем сам маркер
+    rm -f "$opq_file"
 done
 
 echo "Успешно: Файловая система распакована в $TARGET_DIR."
