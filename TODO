@@ -1,2 +1,25 @@
-1. Переименоваит проект в rigger (такелажник, укладчик парашютов, рангоутчик)
-
+1. Разобраться с ошибкой при скаживании многослойных образов.
+При выполнении
+```
+d2r heywoodlh/vulnerable /var/lib/rigger/vulnerable/lower
+```
+Полностью скачался только первый слой 65MB, остальные слои скачались по 163 байта, а при распаковке получили ошибку
+```text
+Распаковка и OCI-процессинг слоев...
+Traceback (most recent call last):
+  File "/usr/local/bin/d2r", line 235, in <module>
+    main()
+    ~~~~^^
+  File "/usr/local/bin/d2r", line 198, in main
+    with tarfile.open(layer_file, mode="r|gz") as tar:
+         ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/tarfile.py", line 1930, in open
+    stream = _Stream(name, filemode, comptype, fileobj, bufsize,
+                     compresslevel)
+  File "/usr/lib/python3.13/tarfile.py", line 376, in __init__
+    self._init_read_gz()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/tarfile.py", line 483, in _init_read_gz
+    raise ReadError("not a gzip file")
+tarfile.ReadError: not a gzip file
+```

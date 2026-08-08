@@ -18,7 +18,7 @@ INSTALL_EXEC = install -m 0755 -D
 
 all: help
 
-## Установка бинарников, автодополнения, конфигов, настройка nftables и перезапуск службы
+## Установка всех компонентов, настройка nftables и перезапуск службы
 install: install-bin install-completion install-service install-network install-nspawn install-nftables reload
 
 ## Установка утилиты управления rigger в /usr/local/bin

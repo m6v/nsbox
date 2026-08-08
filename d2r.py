@@ -143,7 +143,7 @@ def main():
     manifest_url = f"https://{registry_host}/v2/{repo}/manifests/{tag}"
     
     cmd_manifest = [
-        "curl", "-s", "-L",
+        "curl", "-s", "--location-trusted",
         "-H", "User-Agent: Docker-Client/24.0.7 (linux)",
         "-H", "Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json"
     ]
@@ -182,7 +182,7 @@ def main():
         layer_file = os.path.join(cache_dir, f"{idx}_{clean_digest[:12]}.tar.gz")
         
         cmd_blob = [
-            "curl", "-L", "-S",
+            "curl", "--location-trusted", "-S",
             "-H", "User-Agent: Docker-Client/24.0.7 (linux)",
             "-o", layer_file
         ]
@@ -200,27 +200,36 @@ def main():
                 basename = os.path.basename(member.name)
                 dirname = os.path.dirname(member.name)
                 
+                # Обработка удаления конкретного файла/папки (.wh.filename)
                 if basename.startswith(".wh.") and basename != ".wh..wh..opq":
                     real_name = basename[4:]
                     to_delete = os.path.join(target_dir, dirname, real_name)
                     if os.path.exists(to_delete) or os.path.islink(to_delete):
-                        shutil.rmtree(to_delete) if os.path.isdir(to_delete) and not os.path.islink(to_delete) else os.remove(to_delete)
+                        if os.path.isdir(to_delete) and not os.path.islink(to_delete):
+                            shutil.rmtree(to_delete)
+                        else:
+                            os.remove(to_delete)
+                    continue  # Сам файл маркера извлекать не нужно
                         
+                # Обработка непрозрачного удаления директории (.wh..wh..opq)
                 elif basename == ".wh..wh..opq":
                     opaque_dir = os.path.join(target_dir, dirname)
                     if os.path.exists(opaque_dir):
                         for item in os.listdir(opaque_dir):
                             item_path = os.path.join(opaque_dir, item)
-                            shutil.rmtree(item_path) if os.path.isdir(item_path) and not os.path.islink(item_path) else os.remove(item_path)
+                            if os.path.isdir(item_path) and not os.path.islink(item_path):
+                                shutil.rmtree(item_path)
+                            else:
+                                os.remove(item_path)
+                    continue  # Сам файл маркера извлекать не нужно
 
-        cmd_tar = ["tar", "--xattrs", "--xattrs-include=*", "-xzf", layer_file, "-C", target_dir]
-        subprocess.run(cmd_tar, check=True)
-
-    # Удаление маркеров .wh.
-    for root, dirs, files in os.walk(target_dir):
-        for f in files:
-            if f.startswith(".wh."):
-                os.remove(os.path.join(root, f))
+                # Извлечение обычного файла/директории текущего слоя
+                # Используем filter="data" или "tar" для безопасности, если Python >= 3.12
+                try:
+                    tar.extract(member, path=target_dir, filter="fully_trusted")
+                except TypeError:
+                    # Для старых версий Python, где параметра filter еще нет
+                    tar.extract(member, path=target_dir)
 
     shutil.rmtree(cache_dir)
 
