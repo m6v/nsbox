@@ -1,12 +1,23 @@
 #!/usr/bin/env python3
-import os, sys, json, shutil, platform, subprocess, warnings, argparse, tarfile, urllib.request, urllib.parse, base64
+import argparse
+import base64
+import json
+import os
+import platform
+import shutil
+import subprocess
+import sys
+import tarfile
+import urllib.parse
+import urllib.request
+import warnings
 
-# DeprecationWarning disabled for Python 3.7 - 3.14 compatibility
+# Отключение предупреждений об устаревании
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 def get_auth_params(registry_url, repo, username=None, password=None):
     """
-    Делает предзапрос к реестру, чтобы узнать точный URL сервера авторизации (Auth Discovery)
+    Предзапрос к реестру, чтобы узнать точный URL сервера авторизации (Auth Discovery)
     и тип поддерживаемой авторизации (Bearer или Basic).
     """
     url = f"https://{registry_url}/v2/{repo}/manifests/latest"
@@ -74,7 +85,7 @@ def main():
     else:
         image_part, tag = image_arg, "latest"
 
-    # Определяем хост реестра
+    # Определение хоста реестра
     parts = image_part.split("/", 1)
     if len(parts) > 1 and ("." in parts[0] or ":" in parts[0] or parts[0] == "localhost"):
         registry_host = parts[0]
@@ -90,7 +101,7 @@ def main():
     # Динамическое обнаружение типа авторизации
     auth_type, realm, service, scope = get_auth_params(registry_host, repo, username, password)
     
-    # Готовим базовые аргументы авторизации для curl
+    # Подготовка базовых аргументов авторизации для curl
     curl_auth_args = []
     
     if auth_type == "bearer" and realm:
@@ -99,7 +110,7 @@ def main():
         auth_url = f"{realm}?{query}"
         
         cmd_auth = ["curl", "-s", "-L", "-H", "User-Agent: Docker-Client/24.0.7 (linux)"]
-        # Если переданы логин/пароль, передаем их серверу токенов через Basic Auth
+        # Если переданы логин/пароль, передача их серверу токенов через Basic Auth
         if username and password:
             cmd_auth.extend(["-u", f"{username}:{password}"])
         cmd_auth.append(auth_url)
@@ -194,7 +205,7 @@ def main():
         cmd_tar = ["tar", "--xattrs", "--xattrs-include=*", "-xzf", layer_file, "-C", target_dir]
         subprocess.run(cmd_tar, check=True)
 
-    # Финальная очистка самих маркеров удаления с диска
+    # Удаление маркеров .wh.
     for root, dirs, files in os.walk(target_dir):
         for f in files:
             if f.startswith(".wh."):

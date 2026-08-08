@@ -4,10 +4,10 @@ set -eu
 
 # Шаблон systemd-юнита
 SERVICE_TEMPLATE="nspawn@"
-
+# Хранилище с развернутыми образами контейнеров 
 STORAGE_ROOT=/var/lib/nspawn
 
-# Автоматический перезапуск от root через sudo, если запущен от обычного пользователя
+# Перезапуск от root, если скрипт запущен от обычного пользователя
 if [ "$(id -u)" -ne 0 ]; then
     exec sudo "$0" "$@"
 fi
@@ -20,7 +20,6 @@ $(basename "$0") — это легковесный инструмент для �
 
 Команды:
   list                   Вывести список запущенных контейнеров и юнитов
-  create <container>     Создать контейнер
   start <container>      Запустить контейнер
   stop  <container>      Остановить контейнер
   restart <container>    Перезапустить контейнер
@@ -39,48 +38,16 @@ list() {
     systemctl list-units "${SERVICE_TEMPLATE}*" --no-legend --all --no-pager
 }
 
-create() {
-    name="$1"
-
-    mkdir -p "${STORAGE_ROOT}/$name/lower"
-    if [ ! -f /etc/systemd/nspawn/${name}.nspawn ]; then
-        cat << EOF > /etc/systemd/nspawn/${name}.nspawn
-[Network]
-# Тип сети
-VirtualEthernet=yes
-
-# Проброс портов
-# Port=tcp:8080:80
-# Port=tcp:4443:443
-
-[Files]
-# Проброс конфига DNS в режиме Read-Only
-BindReadOnly=/etc/resolv.conf
-
-[Exec]
-# Вариант загрузки
-Boot=no
-
-# Перенесенные ограничения ресурсов
-# LimitMEMORY=2G
-# CPUQuota=50%
-
-# Программа, запускаемая при старте контейнера
-# Parameters=/entrypoint.sh
-Parameters=/bin/sleep infinity
-EOF
-        mkdir -p "${STORAGE_ROOT}/$name/lower"
-    fi
-
-}
-
 start() {
     name="$1"
-    # Проверяем, запущен ли контейнер
+    # Проверка запущен контейнер или нет
     if machinectl show "$name" >/dev/null 2>&1; then
         echo "Контейнер '${name}' уже запущен."
         return 0
     fi
+
+    # Создание дефолтного файла конфигурации
+    mkdir -p /etc/systemd/nspawn && cp -n config.tmpl /etc/systemd/nspawn/${name}.nspawn
 
     echo "Запуск контейнера '${name}'..."
     systemctl start "${SERVICE_TEMPLATE}${name}.service"
@@ -89,7 +56,7 @@ start() {
 
 stop() {
     name="$1"
-    # Проверяем, запущен ли контейнер
+    # Проверка запущен контейнер или нет
     if ! machinectl show "$name" >/dev/null 2>&1; then
         echo "Контейнер '${name}' уже остановлен (или не был запущен)."
         return 0
@@ -111,7 +78,7 @@ execute() {
     name="$1"
     shift
 
-    # Получение PID главного процесса контейнера через machinectl или systemctl
+    # Получение PID главного процесса контейнера через machinectl
     pid=$(machinectl show "$name" -p Leader --value 2>/dev/null || true)
 
     if [ -z "$pid" ] || [ "$pid" -eq 0 ]; then
@@ -119,8 +86,7 @@ execute() {
         exit 1
     fi
 
-    # Если команда не передана, запускаем /bin/sh (параметр -l необязательный, но если указан,
-    # заставляет оболочку запуститься в режиме шелла входа (login shell) с настройкой окружения)
+    # Если команда не передана, запуск /bin/sh в режиме шелла входа (-l, login shell)
     if [ $# -eq 0 ]; then set -- /bin/sh -l; fi
 
     exec nsenter --target "$pid" --mount --uts --ipc --net --pid -- \
@@ -138,7 +104,7 @@ show() {
     if machinectl show "$name" >/dev/null 2>&1; then
         machinectl status "$name" --no-pager
     else
-        echo "Контейнер '$name' не зарегистрирован в machined (выключен)"
+        echo "Контейнер '$name' не зарегистрирован или выключен"
     fi
 }
 
@@ -151,16 +117,22 @@ destroy() {
         exit 1
     fi
 
-    container_dir="${STORAGE_ROOT}/$name"
-    echo "Контейнер '$name' не запущен. Проверка каталога $container_dir..."
+    printf "Вы действительно хотите удалить контейнер? [y/N] "
+    read -r response
+    if [ "$response" != "y" ] && [ "$response" != "Y" ]; then
+        exit 0
+    fi
 
-    if [ -d "$container_dir" ]; then
-        echo "Удаление $container_dir..."
-        rm -rf "$container_dir"
+    dir="${STORAGE_ROOT}/$name"
+    if [ -d "$dir" ]; then
+        echo "Удаление $dir..."
+        rm -rf "$dir"
         echo "Контейнер успешно удален"
     else
-        echo "Каталог $container_dir не найден"
+        echo "Каталог $dir не найден"
     fi
+    # Удаление файла конфигурации, если существует
+    rm -f /etc/systemd/nspawn/${name}.nspawn
 }
 
 log() {
@@ -169,9 +141,7 @@ log() {
 }
 
 # Проверка минимального количества аргументов
-if [ $# -lt 1 ]; then
-    usage
-fi
+[ $# -lt 1 ] && usage
 
 ACTION="$1"
 shift
@@ -180,7 +150,7 @@ shift
 [ "$ACTION" = "help" ] && ACTION="usage"
 
 case "$ACTION" in
-    list|create|start|stop|restart|execute|show|destroy|log|usage) ;;
+    list|start|stop|restart|execute|show|destroy|log|usage) ;;
     *)
         echo "Ошибка: неизвестная команда '$ACTION'" >&2
         usage ;;
