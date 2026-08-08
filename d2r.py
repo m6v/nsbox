@@ -20,6 +20,11 @@ def get_auth_params(registry_url, repo, username=None, password=None):
     Предзапрос к реестру, чтобы узнать точный URL сервера авторизации (Auth Discovery)
     и тип поддерживаемой авторизации (Bearer или Basic).
     """
+    # Если мы стучимся в официальный Docker Hub и в имени репозитория нет косой черты,
+    # это официальный базовый образ (alpine, ubuntu и т.д.). Ему нужен префикс library/.
+    if registry_url in ["registry-1.docker.io", "://docker.com"] and "/" not in repo:
+        repo = f"library/{repo}"
+
     url = f"https://{registry_url}/v2/{repo}/manifests/latest"
     req = urllib.request.Request(url)
     req.add_header("User-Agent", "Docker-Client/24.0.7 (linux)")
@@ -36,6 +41,11 @@ def get_auth_params(registry_url, repo, username=None, password=None):
                 return "basic", None, None, None
             return "anonymous", None, None, None
     except urllib.error.HTTPError as e:
+        # Если сервер вернул 404, значит репозитория нет в реестре
+        if e.code == 404:
+            print(f"Ошибка: Репозиторий '{repo}' не найден в реестре {registry_url}.")
+            return "not_found", None, None, None
+            
         auth_header = e.headers.get("Www-Authenticate")
         if not auth_header:
             return "anonymous", None, None, None
@@ -49,6 +59,7 @@ def get_auth_params(registry_url, repo, username=None, password=None):
                     k, v = part.split("=", 1)
                     params[k.strip()] = v.strip('"')
             
+            # Используем repo с уже подставленным префиксом library/ если это необходимо
             scope = params.get("scope", f"repository:{repo}:pull")
             return "bearer", params.get("realm"), params.get("service"), scope
             

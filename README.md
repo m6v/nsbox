@@ -1,129 +1,30 @@
-# Коллекция шаблонов и инструментов для создания и управления контейнерами systemd-nspawn
+# Скрипт `rigger` и шаблон юнита `rigger@.service` для управления контейнерами `systemd-nspawn`
 
-## `rigger@.service` и `rigger`
-Юнит и скрипт управления контейнерами `systemd-nspawn`.
+- `rigger` - скрипт для управления контейнерами `systemd-nspawn`
+- `rigger@.service` - шаблон службы для запуска контейнеров `systemd-nspawn`
+- `d2r.py` - скрипт для создания контейнеров на базе образов docker
 
-Контейнер использует оверлей, создаваемый в каталоге `/var/lib/nspawn/<container_name>`. В качестве нижнего слоя используется подкаталог `/var/lib/nspawn/<container_name>/lower`. Если при запуске контейнера каталог нижнего слоя отсутствует или пустой в него автоматически монтируется корень файловой системы хоста.
+Контейнер использует оверлей, создаваемый в каталоге `/var/lib/rigger/<container_name>`. В качестве нижнего слоя используется подкаталог `/var/lib/rigger/<container_name>/lower`. Если при запуске контейнера каталог нижнего слоя отсутствует или пустой в него автоматически монтируется корень файловой системы хоста.
 
-При запуске службы `nspawn@alpine-container.service`, бинарник `systemd-nspawn` проверяет, есть ли на хосте файл конфигурации, чье имя совпадает с флагом `--machine=alpine-container`. В данном случае это файл `/etc/systemd/nspawn/alpine-container.nspawn`.
-В него можно записать,например, настройки проброса портов
-```bash
-mkdir -p /etc/systemd/nspawn
-cat << EOF > /etc/systemd/nspawn/alpine-container.nspawn
-[Network]
-VirtualEthernet=yes
-
-Port=tcp:8080:80
-Port=tcp:4443:443
-Port=udp:5000:5000
-
-[Exec]
-# Программа, запускаемая при старте контейнера
-Boot=no
-Parameters=/bin/sleep infinity
-# Parameters=/entrypoint.sh
-EOF
+Для создания контейнера можно использовать утилиты типа debootstrap или срипт `d2r.py`, автоматизирующий процесс загрузки и развертывания образов docker.
+Пример использования
 ```
-Режим сети, используемый для контейнера определяется настройками файла `/etc/systemd/nspawn/container_name.nspawn`. При отсутствии файла используется сеть хоста.
-Если указан параметр `Boot=yes`, то запускается программа `/sbin/init` и ей передаются `Parameters`, если заданы.
-Если указан параметр `Boot=no`, то запускается команда, указаннная в `Parameters`. При отсутствии `Parameters` контейнер не запускается (или запускается и тут же закрывается)
-
-### Режим сети "виртуальный Ethernet" (`--network-veth`)
-Используется режим сети "виртуальный Ethernet" (`--network-veth`), в котором создается изолированное сетевое пространство имен, а между хостом и контейнером прокладывается пара виртуальных интерфейсов. Внутри контейнера интерфейс всегда называется `host0`, а на хосте имя интерфейса формируется динамически по шаблону `ve-<имя_контейнера>` (например, `ve-debian`). В связке с `systemd-networkd` обеспечивается работа встроенногой DHCP, маршрутизация и проброс портов. Чтобы `systemd-networkd` управлял только интерфейсами контейнеров и игнорировал основную физическую сеть указывается соответствующий шаблон (`ve-*`). Имя интерфейса можно задать вручную с помощью параметра `--network-veth-extra=myif:host0` (в данном примере на хосте создастся интерфейс с фиксированным именем `myif`)
-
-```bash
-cat << EOF > /etc/systemd/network/10-nspawn-veth.network
-[Match]
-Name=ve-*
-
-[Network]
-# IP хоста (шлюза) для всех контейнеров
-Address=192.168.100.1/24
-# Настройка маскарадинга и форвардинга пакетов
-IPMasquerade=ipv4
-IPv4Forwarding=yes
-
-# Включение встроенного DHCP-сервера
-DHCPServer=yes
-
-[DHCPServer]
-# Определение пула динамических IP-адресов
-PoolOffset=100
-PoolSize=150
-
-systemctl enable --now systemd-networkd
-```
-> В systemd v.241 (Astra Linux SE 1.7.6.15) из-за бага dhcp в режиме VirtualEthernet не работает, после многих попыток способа победить не нашлось!
-
-### Режим сети "виртуальный мост" (--network-bridge)
-В режиме "виртуальный мост" все контейнеры, подключенные к одному мосту, находятся в одном виртуальном «коммутаторе» и могут общаться друг с другом напрямую по своим IP-адресам без ограничений. Проброс портов наружу продолжит работать, хост будет принимать трафик из внешней сети и перенаправлять его в контейнеры, даже если они объединены мостом.
-
->Дальнейшие действия не проверялись!
-
-1. Создайте мост, который будет существовать только внутри хоста (без привязки к физической карте), так вы изолируете контейнеры, но сохраните им доступ в сеть через хост
-```bash
-cat << EOF > /etc/systemd/network/20-nspawn-vbridge.netdev
-[NetDev]
-Name=br0
-Kind=bridge
-EOF
-```
-2. Создайте файл конфигурации для этого моста
-```bash
-cat << EOF > /etc/systemd/network/21-nspawn-vbridge.network
-[Match]
-Name=br0
-
-[Network]
-# IP хоста (шлюза) теперь назначен самому мосту
-Address=192.168.100.1/24
-# Включаем DHCP-сервер на мосту
-DHCPServer=yes
-# Включаем NAT, чтобы у контейнеров был интернет через хост
-IPMasquerade=ipv4
-IPv4Forwarding=yes
-
-[DHCPServer]
-# Настройки пула адресов
-PoolOffset=100
-PoolSize=150
-EOF
+sudo -i
+mkdir -p /var/lib/rigger/debian/lower
+d2r.py debian /var/lib/rigger/debian/lower
 ```
 
-3. Настройте правила для интерфейсов контейнеров
-При использовании моста systemd-nspawn создает на хосте интерфейсы с префиксом `vb-*`, поэтому в настройки добавляем соответствующий шаблон
-```bash
-cat << EOF > /etc/systemd/network/25-nspawn-containers.network
-[Match]
-Name=ve-* vb-*
+При запуске службы `rigger@<container_name>.service`, утилита `systemd-nspawn` проверяет, наличие файла конфигурации в каталоге /etc/systemd/nspawn, имя которого задано в параметре `--machine=<container_name>`, а расширение .nspawn.
 
-[Network]
-Bridge=br0
-EOF
-```
+Режим сети, используемый для контейнера определяется настройками файла `/etc/systemd/nspawn/<container_name>.nspawn`. При отсутствии файла используется сеть хоста.
+> В systemd v.241 (Astra Linux SE 1.7.6.15) из-за бага в режиме VirtualEthernet не работает dhcp, после многих попыток способа победить не нашлось!
 
-4. Применение настроек
-```
-systemctl restart systemd-networkd
-```
+Если указан параметр `Boot=yes`, запускается программа `/sbin/init` и ей передаются `Parameters` (если заданы).
+Если указан параметр `Boot=no`, запускается команда, указаннная в `Parameters`, при отсутствии `Parameters` контейнер не запускается (или запускается и тут же закрывается)
 
-##  Включение NAT (маскарадинга) в nftables на хосте
-```bash
-# Маскарадинг (NAT)
-sudo nft add rule ip nat postrouting ip saddr 192.168.100.0/24 masquerade
+## Легковесные окружения для использования в контейнерах
 
-# Защита от блокировок Docker / Libvirt (фильтрация)
-sudo nft insert rule ip filter FORWARD iifname "ve-*" accept
-sudo nft insert rule ip filter FORWARD oifname "ve-*" ct state established,related accept
-
-# Сохранение результата в постоянную конфигурацию
-nft list ruleset | sudo tee /etc/nftables.conf
-
-# Активация службы nftables, чтобы при загрузке хоста ядро поднимало NAT для контейнеров
-systemctl enable nftables.service
-```
-
-### Окружение busybox
+### busybox
 Для создания собственного минималистичного окружения с busybox выполнить следующие действия:
 
 1. Создание корневой директории контейнера
@@ -186,7 +87,7 @@ PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
 EOF
 ```
 
-### Окружение alpine-minirootfs
+### alpine-minirootfs
 1. Распаковка архива в каталог нижнего слоя
 
 На сайте [dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/] найти самый свежий файл `alpine-minirootfs-x.xx.x-x86_64.tar.gz`, скачать и распаковать его в каталог нижнего уровня оверлея.
