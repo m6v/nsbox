@@ -181,16 +181,44 @@ def main():
         blob_url = f"https://{registry_host}/v2/{repo}/blobs/{digest}"
         layer_file = os.path.join(cache_dir, f"{idx}_{clean_digest[:12]}.tar.gz")
         
+        # 1. Быстрый HEAD-запрос (весит < 1 КБ), чтобы узнать прямую ссылку на AWS S3
+        cmd_check = [
+            "curl", "-s", "-I", "-L",
+            "-H", "User-Agent: Docker-Client/24.0.7 (linux)"
+        ]
+        cmd_check.extend(curl_auth_args)
+        cmd_check.append(blob_url)
+        
+        headers_output = subprocess.check_output(cmd_check, text=True)
+        
+        # Корректно ищем финальный или промежуточный URL перенаправления
+        redirect_url = None
+        for line in headers_output.splitlines():
+            if line.lower().startswith("location:"):
+                # Разбиваем по первому двоеточию и очищаем пробелы вокруг URL
+                redirect_url = line.split(":", 1)[1].strip()
+        
+        # 2. Формируем команду на скачивание самого файла слоя
         cmd_blob = [
-            "curl", "--location-trusted", "-S",
+            "curl", "-L", "-S", "-f",
             "-H", "User-Agent: Docker-Client/24.0.7 (linux)",
             "-o", layer_file
         ]
-        cmd_blob.extend(curl_auth_args)
-        cmd_blob.append(blob_url)
         
-        subprocess.run(cmd_blob, check=True)
-        cached_files.append(layer_file)
+        if redirect_url:
+            # Если нашли редирект (AWS S3/CDN), скачиваем напрямую БЕЗ токенов авторизации
+            cmd_blob.append(redirect_url)
+        else:
+            # Если редиректа нет (редкий случай), качаем с Docker Hub с токеном
+            cmd_blob.extend(curl_auth_args)
+            cmd_blob.append(blob_url)
+            
+        try:
+            subprocess.run(cmd_blob, check=True)
+            cached_files.append(layer_file)
+        except subprocess.CalledProcessError:
+            print(f"\nОшибка при скачивании слоя {clean_digest[:12]}. Прерывание.")
+            sys.exit(1)
 
     # Послойная обработка и извлечение слоев
     print("Распаковка и OCI-процессинг слоев...")
