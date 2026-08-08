@@ -18,43 +18,43 @@ INSTALL_EXEC = install -m 0755 -D
 
 all: help
 
-## Установить бинарники, автодополнение, конфиги, настроить nftables и перезапустить службы
+## Установка бинарников, автодополнения, конфигов, настройка nftables и перезапуск службы
 install: install-bin install-completion install-service install-network install-nspawn install-nftables reload
 
-## Установить утилиту управления rigger в /usr/local/bin
+## Установка утилиты управления rigger в /usr/local/bin
 install-bin:
 	$(INSTALL_EXEC) rigger $(BIN_DIR)/rigger
 	$(INSTALL_EXEC) d2r.py $(BIN_DIR)/d2r
 
-## Установить bash-completion для rigger
+## Установка bash-completion для rigger
 install-completion:
 	$(INSTALL_DATA) rigger-completion.bash $(BASH_COMPLETION_DIR)/rigger
 
-## Установить шаблонный юнит rigger@.service
+## Установка шаблонного юнита rigger@.service
 install-service:
 	$(INSTALL_DATA) rigger@.service $(SYSTEMD_DIR)/rigger@.service
 	systemctl daemon-reload
 
-## Установить сетевую конфигурацию systemd-networkd
+## Установка сетевой конфигурации systemd-networkd
 install-network:
 	$(INSTALL_DATA) -t $(NETWORK_DIR) 10-rigger-veth.network 20-rigger-vbridge.netdev 21-rigger-vbridge.network 22-rigger-containers.network
 
-## Установить шаблон конфигурационного файла .nspawn
+## Установка шаблон конфигурационного файла .nspawn
 install-nspawn:
 	$(INSTALL_DATA) config.tmpl $(NSPAWN_DIR)/config.tmpl
 
-## Установить модуль rigger-nat.conf и привязать include
+## Установка модуля rigger-nat.conf и привязка include
 install-nftables:
 	mkdir -p $(NFTABLES_DIR)
 	$(INSTALL_DATA) rigger-nat.conf $(NFTABLES_DIR)/rigger-nat.conf
 	@grep -qxF 'include "$(NFTABLES_DIR)/*.conf"' $(NFTABLES_CONF) || \
 		echo 'include "$(NFTABLES_DIR)/*.conf"' >> $(NFTABLES_CONF)
 
-## Проверить синтаксис изолированного модуля nftables
+## Проверка синтаксиса изолированного модуля nftables
 check:
 	nft -c -f rigger-nat.conf
 
-## Перезапустить networkd, применить правила nftables и обновить юниты
+## Перезапуск networkd, применение правила nftables и обновление юнитов
 reload:
 	nft -f $(NFTABLES_CONF)
 	systemctl reload-or-restart systemd-networkd
