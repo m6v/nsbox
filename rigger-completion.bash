@@ -1,4 +1,4 @@
-_nspawnctl_completion() {
+_rigger_completion() {
     local cur prev
     # Текущее слово под курсором
     cur="${COMP_WORDS[COMP_CWORD]}"
@@ -29,5 +29,5 @@ _nspawnctl_completion() {
     fi
 }
 
-# Привязка автодополнения к имени утилиты nspawnctl
-complete -F _nspawnctl_completion nspawnctl
+# Привязка автодополнения к имени утилиты rigger
+complete -F _rigger_completion rigger

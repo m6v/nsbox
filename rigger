@@ -3,9 +3,9 @@
 set -eu
 
 # Шаблон systemd-юнита
-SERVICE_TEMPLATE="nspawn@"
+SERVICE_TEMPLATE="rigger@"
 # Хранилище с развернутыми образами контейнеров 
-STORAGE_ROOT=/var/lib/nspawn
+STORAGE_ROOT=/var/lib/rigger
 
 # Перезапуск от root, если скрипт запущен от обычного пользователя
 if [ "$(id -u)" -ne 0 ]; then
@@ -113,7 +113,7 @@ destroy() {
     # Проверяем, запущен ли контейнер в machined
     if machinectl show "$name" >/dev/null 2>&1; then
         echo "Ошибка: Контейнер '$name' сейчас запущен!" >&2
-        echo "Остановите его перед удалением: nspawnctl stop $name" >&2
+        echo "Остановите его перед удалением: $(basename "$0") stop $name" >&2
         exit 1
     fi
 

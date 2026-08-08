@@ -21,37 +21,37 @@ all: help
 ## Установить бинарники, автодополнение, конфиги, настроить nftables и перезапустить службы
 install: install-bin install-completion install-service install-network install-nspawn install-nftables reload
 
-## Установить утилиту управления nspawnctl в /usr/local/bin
+## Установить утилиту управления rigger в /usr/local/bin
 install-bin:
-	$(INSTALL_EXEC) nspawnctl $(BIN_DIR)/nspawnctl
+	$(INSTALL_EXEC) rigger $(BIN_DIR)/rigger
 
-## Установить bash-completion для nspawnctl
+## Установить bash-completion для rigger
 install-completion:
-	$(INSTALL_DATA) nspawnctl-completion.bash $(BASH_COMPLETION_DIR)/nspawnctl
+	$(INSTALL_DATA) rigger-completion.bash $(BASH_COMPLETION_DIR)/rigger
 
-## Установить шаблонный юнит nspawn@.service
+## Установить шаблонный юнит rigger@.service
 install-service:
-	$(INSTALL_DATA) nspawn@.service $(SYSTEMD_DIR)/nspawn@.service
+	$(INSTALL_DATA) rigger@.service $(SYSTEMD_DIR)/rigger@.service
 	systemctl daemon-reload
 
 ## Установить сетевую конфигурацию systemd-networkd
 install-network:
-	$(INSTALL_DATA) -t $(NETWORK_DIR) 10-nspawn-veth.network 20-nspawn-vbridge.netdev 21-nspawn-vbridge.network 25-nspawn-containers.network
+	$(INSTALL_DATA) -t $(NETWORK_DIR) 10-rigger-veth.network 20-rigger-vbridge.netdev 21-rigger-vbridge.network 22-rigger-containers.network
 
 ## Установить шаблон конфигурационного файла .nspawn
 install-nspawn:
 	$(INSTALL_DATA) config.tmpl $(NSPAWN_DIR)/config.tmpl
 
-## Установить модуль nspawn-nat.conf и привязать include
+## Установить модуль rigger-nat.conf и привязать include
 install-nftables:
 	mkdir -p $(NFTABLES_DIR)
-	$(INSTALL_DATA) nspawn-nat.conf $(NFTABLES_DIR)/nspawn-nat.conf
+	$(INSTALL_DATA) rigger-nat.conf $(NFTABLES_DIR)/rigger-nat.conf
 	@grep -qxF 'include "$(NFTABLES_DIR)/*.conf"' $(NFTABLES_CONF) || \
 		echo 'include "$(NFTABLES_DIR)/*.conf"' >> $(NFTABLES_CONF)
 
 ## Проверить синтаксис изолированного модуля nftables
 check:
-	nft -c -f nspawn-nat.conf
+	nft -c -f rigger-nat.conf
 
 ## Перезапустить networkd, применить правила nftables и обновить юниты
 reload:
@@ -63,11 +63,11 @@ help:
 	@echo ""
 	@echo "Цели:"
 	@echo "  install            - Полный деплой всех компонентов системы"
-	@echo "  install-bin        - Установка только nspawnctl"
+	@echo "  install-bin        - Установка только rigger"
 	@echo "  install-completion - Установка только автодополнения bash"
-	@echo "  install-service    - Деплой nspawn@.service и daemon-reload"
+	@echo "  install-service    - Деплой rigger@.service и daemon-reload"
 	@echo "  install-network    - Деплой systemd-networkd файлов"
 	@echo "  install-nspawn     - Деплой .nspawn файлов"
-	@echo "  install-nftables   - Деплой nspawn-nat.conf и привязка include"
+	@echo "  install-nftables   - Деплой rigger-nat.conf и привязка include"
 	@echo "  check              - Проверка синтаксиса nftables"
 	@echo "  reload             - Перезапуск networkd и применение nftables"
