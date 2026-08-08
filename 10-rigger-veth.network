@@ -1,4 +1,4 @@
-# /etc/systemd/network/10-nspawn-veth.conf
+# /etc/systemd/network/10-rigger-veth.conf
 
 [Match]
 Name=ve-*

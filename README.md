@@ -7,6 +7,7 @@
 Контейнер использует оверлей, создаваемый в каталоге `/var/lib/rigger/<container_name>`. В качестве нижнего слоя используется подкаталог `/var/lib/rigger/<container_name>/lower`. Если при запуске контейнера каталог нижнего слоя отсутствует или пустой, в него автоматически монтируется корень файловой системы хоста.
 
 Для создания контейнера можно использовать утилиты типа `debootstrap` или срипт `d2r.py`, автоматизирующий процесс загрузки и развертывания образов docker.
+
 Пример использования
 ```bash
 sudo -i
@@ -14,9 +15,10 @@ mkdir -p /var/lib/rigger/debian/lower
 d2r.py debian /var/lib/rigger/debian/lower
 ```
 
-При запуске службы `rigger@<container_name>.service`, утилита `systemd-nspawn` проверяет, наличие файла конфигурации имя которого задано в параметре `--machine=<container_name>`, а расширение `.nspawn` в каталоге `/etc/systemd/nspawn`, .
+При запуске службы `rigger@<container_name>.service`, утилита `systemd-nspawn` проверяет, наличие файла конфигурации имя которого задано в параметре `--machine=<container_name>`, а расширение `.nspawn` в каталоге `/etc/systemd/nspawn`.
 
-Режим сети, используемый для контейнера определяется настройками файла `/etc/systemd/nspawn/<container_name>.nspawn`. При отсутствии файла используется сеть хоста.
+Режим сети, используемый для контейнера, определяется настройками файла `/etc/systemd/nspawn/<container_name>.nspawn`. При отсутствии файла используется сеть хоста.
+> NB! Подсеть контейнеров 192.168.100.0/24 в явном виде указана в файлах /etc/systemd/network/*.conf и /etc/nftables.d/rigger-nat.conf. Изменения настроек сети делать делать синхронизированно.
 > В systemd v.241 (Astra Linux SE 1.7.6.15) в режиме VirtualEthernet не работает dhcp. Это изветный баг, после многих попыток способа победить не нашлось!
 
 Если указан параметр `Boot=yes`, запускается программа `/sbin/init` и ей передаются `Parameters` (если заданы).
@@ -130,7 +132,7 @@ echo "<h1>Hello world!</h1>" > /var/www/localhost/htdocs/index.html
 httpd -h /var/www/localhost/htdocs -p 80
 ```
 
-5. Полноценный запуск со средой инициазции
+5. Запуск со средой инициазции
 
 Зайдите в контейнер в режиме chroot, выполнив команду
 ```
@@ -157,13 +159,6 @@ sed -i '/#.*getty/a console::respawn:/sbin/getty 38400 console' /etc/inittab
 Полноценная загрузка ОС
 ```
 systemd-nspawn -D /tmp/alpine -b
-```
-
-6. Микро Alpine (13MB)
-Если нужен минимальный образ для тестов, можно собрать микро-ОС самостоятельно прямо из sh Alpine
-```
-mkdir -p /opt/micro_rootfs
-apk add --root /opt/micro_rootfs --initdb --repositories-file /etc/apk/repositories --allow-untrusted alpine-baselayout alpine-keys alpine-release apk-tools busybox openrc
 ```
 
 ### debootstrap
