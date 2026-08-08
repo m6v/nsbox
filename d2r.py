@@ -218,7 +218,7 @@ def main():
     for mp in ["proc", "sys", "dev", "run", "tmp"]:
         os.makedirs(os.path.join(target_dir, mp), exist_ok=True)
 
-    print("Файловая система успешно развернута в: " + target_dir)
+    print("Файловая система успешно развернута в " + target_dir)
 
 if __name__ == "__main__":
     main()

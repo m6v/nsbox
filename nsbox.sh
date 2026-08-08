@@ -33,7 +33,7 @@ fi
 # Максимальный размер виртуального диска
 MAX_SIZE="16G"
 
-# Контейненронезависимые каталоги
+# Контейнеронезависимые каталоги
 STORAGE_DIR="/var/lib/nsbox"
 RUNTIME_DIR="/run/nsbox"
 mkdir -p "$STORAGE_DIR" "$RUNTIME_DIR"
@@ -51,7 +51,6 @@ HOST_IFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
 
 IS_NET_ENABLED=false
 IS_GUI_ENABLED=false
-
 
 # Общий системный хаб cgroup
 # CGROUP_BASE="/sys/fs/cgroup/nsbox"
@@ -236,18 +235,7 @@ if [ ! -f "$IMAGE_FILE" ]; then
     mkfs.ext4 -F "$IMAGE_FILE"
 fi
 
-# Монтирование нижнего слоя OverlayFS
-: "${ROOT_DIR:="/"}"
-
-LOWER_DIR="$ROOT_DIR"
-# Каталог для монтирования нижнего слоя ФС контейнера
-# LOWER_DIR="$RUNTIME_DIR/root"
-# mkdir -p "$LOWER_DIR"
-# if ! mountpoint -q "$LOWER_DIR"; then
-#     mount --bind "$ROOT_DIR" "$LOWER_DIR";
-# fi
-
-
+LOWER_DIR="${ROOT_DIR:="/"}"
 # Контейнерозависимые каталоги
 BASE_DIR="$RUNTIME_DIR/$CONTAINER_NAME"
 UPPER_DIR="$BASE_DIR/upper"
