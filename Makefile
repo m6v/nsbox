@@ -24,6 +24,7 @@ install: install-bin install-completion install-service install-network install-
 ## Установить утилиту управления rigger в /usr/local/bin
 install-bin:
 	$(INSTALL_EXEC) rigger $(BIN_DIR)/rigger
+	$(INSTALL_EXEC) d2r.py $(BIN_DIR)/d2r
 
 ## Установить bash-completion для rigger
 install-completion:

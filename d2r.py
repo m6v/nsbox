@@ -75,7 +75,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Fetch Docker/OCI images from any public or private registry, cache layers, and extract rootfs."
     )
-    parser.add_argument("image", help="Имя образа (например, alpine:latest, quay.io/username/private-image:1.0)")
+    parser.add_argument("image", help="Имя образа, например, alpine:latest или quay.io/username/private-image:1.0)")
     parser.add_argument("target_dir", help="Целевой каталог для rootfs")
     parser.add_argument("-u", "--user", help="Имя пользователя для авторизации в реестре", default=None)
     parser.add_argument("-p", "--password", help="Пароль или токен доступа (Token/PAT) для авторизации", default=None)
