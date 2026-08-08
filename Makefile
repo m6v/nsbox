@@ -36,7 +36,7 @@ install-service:
 
 ## Установить сетевую конфигурацию systemd-networkd
 install-network:
-	$(INSTALL_DATA) 10-nspawn-veth.network $(NETWORK_DIR)/10-nspawn-veth.network
+	$(INSTALL_DATA) -t $(NETWORK_DIR) 10-nspawn-veth.network 20-nspawn-vbridge.netdev 21-nspawn-vbridge.network 25-nspawn-containers.network
 
 ## Установить шаблон конфигурационного файла .nspawn
 install-nspawn:

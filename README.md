@@ -93,7 +93,7 @@ EOF
 3. Настройте правила для интерфейсов контейнеров
 При использовании моста systemd-nspawn создает на хосте интерфейсы с префиксом `vb-*`, поэтому в настройки добавляем соответствующий шаблон
 ```bash
-cat << EOF > /etc/systemd/network/25-containers.network
+cat << EOF > /etc/systemd/network/25-nspawn-containers.network
 [Match]
 Name=ve-* vb-*
 

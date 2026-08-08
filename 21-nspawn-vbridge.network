@@ -1,0 +1,16 @@
+[Match]
+Name=br0
+
+[Network]
+# IP хоста (шлюза) теперь назначен самому мосту
+Address=192.168.100.1/24
+# Включаем DHCP-сервер на мосту
+DHCPServer=yes
+# Включаем NAT, чтобы у контейнеров был интернет через хост
+IPMasquerade=ipv4
+IPv4Forwarding=yes
+
+[DHCPServer]
+# Настройки пула адресов
+PoolOffset=100
+PoolSize=150

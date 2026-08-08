@@ -1,0 +1,5 @@
+[Match]
+Name=v[eb]-*
+
+[Network]
+Bridge=br0
