@@ -1,4 +1,4 @@
-# Переменные путей установки (поддерживают префикс DESTDIR для сборки deb)
+# Переменные путей установки
 PREFIX        ?= /etc
 EXEC_PREFIX   ?= /usr/local
 
@@ -24,15 +24,15 @@ PKG_DIR     = build_deb
 
 all: help
 
-## Установка всех компонентов, настройка nftables и перезапуск службы (для локального make install)
+## Установка всех компонентов, настройка nftables и перезапуск службы
 install: install-bin install-completion install-service install-network install-nspawn install-nftables reload
 
-## Установка утилиты управления rigger
+## Установка утилит управления
 install-bin:
 	$(INSTALL_EXEC) rigger $(BIN_DIR)/rigger
 	$(INSTALL_EXEC) d2r.py $(BIN_DIR)/d2r
 
-## Установка bash-completion для rigger
+## Установка bash-completion
 install-completion:
 	$(INSTALL_DATA) rigger-completion.bash $(BASH_COMPLETION_DIR)/rigger
 
@@ -49,7 +49,7 @@ install-network:
 	$(INSTALL_DATA) 21-rigger-vbridge.network $(NETWORK_DIR)/21-rigger-vbridge.network
 	$(INSTALL_DATA) 22-rigger-containers.network $(NETWORK_DIR)/22-rigger-containers.network
 
-## Установка шаблон конфигурационного файла .nspawn
+## Установка шаблона конфигурационного файла .nspawn
 install-nspawn:
 	$(INSTALL_DATA) config.tmpl $(NSPAWN_DIR)/config.tmpl
 
@@ -66,7 +66,7 @@ install-nftables:
 check:
 	-/usr/sbin/nft --check --file rigger-nat.conf
 
-## Перезапуск networkd, применение правила nftables и обновление юнитов (только дляmake install)
+## Перезапуск networkd, применение правила nftables и обновление юнитов
 reload:
 	@if [ -z "$(DESTDIR)" ]; then \
 		nft -f $(NFTABLES_CONF); \
@@ -82,7 +82,7 @@ deb: clean check
 	@echo "Priority: optional" >> $(PKG_DIR)/DEBIAN/control
 	@echo "Architecture: $(PKG_ARCH)" >> $(PKG_DIR)/DEBIAN/control
 	@echo "Depends: systemd-container, python3, nftables" >> $(PKG_DIR)/DEBIAN/control
-	@echo "Maintainer: Your Name <your.email@example.com>" >> $(PKG_DIR)/DEBIAN/control
+	@echo "Maintainer: Sergey Maksimov <m6v@mail.ru>" >> $(PKG_DIR)/DEBIAN/control
 	@echo "Description: Инструмент управления контейнерами systemd-nspawn" >> $(PKG_DIR)/DEBIAN/control
 	@echo " Автоматизация развертывания, сетевой конфигурации veth/vbridge" >> $(PKG_DIR)/DEBIAN/control
 	@echo " и интеграция с правилами трансляции адресов nftables." >> $(PKG_DIR)/DEBIAN/control
@@ -101,6 +101,6 @@ help:
 	@echo "Использование: make [цель]"
 	@echo ""
 	@echo "Цели:"
-	@echo "  deb                - Собрать готовый .deb пакет проекта"
-	@echo "  clean              - Удалить временные директории сборки"
-	@echo "  install            - Прямая установка в систему (требует sudo)"
+	@echo "  deb     - Собрать готовый .deb пакет проекта"
+	@echo "  clean   - Удалить временные директории сборки"
+	@echo "  install - Установить в систему (требует sudo)"
