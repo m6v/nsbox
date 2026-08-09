@@ -5,20 +5,20 @@ NFTABLES_CONF="/etc/nftables.conf"
 
 if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
     if [ -f "$NFTABLES_CONF" ]; then
-        # Удаляем нашу строку include
+        # Удалить строку include
         sed -i '/include "\/etc\/nftables.d\/\*\.conf"/d' "$NFTABLES_CONF"
         
-        # Если в файле остались только наши дефолтные строки (комментарий и flush), удаляем файл целиком
+        # Если в файле остались только наши дефолтные строки (комментарий и flush), удалить файл целиком
         if [ "$1" = "purge" ]; then
-            # Проверяем, пустой ли файл или содержит только базовый скелет
-            # Удаляем, если кроме flush ruleset и комментариев там ничего нет
+            # Проверяить, пустой ли файл или содержит только базовый скелет
+            # Удалить, если кроме flush ruleset и комментариев там ничего нет
             if ! grep -qE '^[[:space:]]*[^#[:space:]]' "$NFTABLES_CONF" | grep -qv 'flush ruleset'; then
                 rm -f "$NFTABLES_CONF"
             fi
         fi
     fi
 
-    # Перезапускаем сеть, чтобы применить изменения
+    # Перезапустить сеть, чтобы применить изменения
     if [ -d /run/systemd/system ]; then
         systemctl daemon-reload || true
         systemctl reload-or-restart systemd-networkd || true

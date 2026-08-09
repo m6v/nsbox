@@ -5,7 +5,7 @@ NFTABLES_CONF="/etc/nftables.conf"
 NFTABLES_DIR="/etc/nftables.d"
 
 if [ "$1" = "configure" ]; then
-    # Если главного конфига нет, создаем базовый скелет
+    # Если главного конфига нет, создать базовый скелет
     if [ ! -f "$NFTABLES_CONF" ]; then
         mkdir -p "$(dirname "$NFTABLES_CONF")"
         echo '#!/usr/sbin/nft -f' > "$NFTABLES_CONF"
@@ -13,11 +13,11 @@ if [ "$1" = "configure" ]; then
         chmod +x "$NFTABLES_CONF"
     fi
 
-    # Теперь безопасно добавляем наш include
+    # Безопасно добавить include
     grep -qxF "include \"$NFTABLES_DIR/*.conf\"" "$NFTABLES_CONF" || \
         echo "include \"$NFTABLES_DIR/*.conf\"" >> "$NFTABLES_CONF"
     
-    # Применяем правила
+    # Применить правила
     nft -f "$NFTABLES_CONF" 2>/dev/null || true
 fi
 
