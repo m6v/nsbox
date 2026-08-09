@@ -90,7 +90,7 @@ deb: clean check
 	@if [ -f postrm ]; then $(INSTALL_EXEC) postrm $(PKG_DIR)/DEBIAN/postrm; fi
 	@$(MAKE) --no-print-directory install DESTDIR=$(CURDIR)/$(PKG_DIR)
 	dpkg-deb --build $(PKG_DIR) $(PKG_NAME)_$(PKG_VERSION)_$(PKG_ARCH).deb
-	$(MAKE) clean
+	@rm -rf $(PKG_DIR)
 
 ## Очистка временных файлов сборки и старых пакетов
 clean:
