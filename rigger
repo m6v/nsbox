@@ -47,7 +47,7 @@ start() {
     fi
 
     # Создание дефолтного файла конфигурации
-    mkdir -p /etc/systemd/nspawn && cp -n config.tmpl /etc/systemd/nspawn/${name}.nspawn
+    mkdir -p /etc/systemd/nspawn && cp -n /etc/systemd/nspawn/config.tmpl /etc/systemd/nspawn/${name}.nspawn
 
     echo "Запуск контейнера '${name}'..."
     systemctl start "${SERVICE_TEMPLATE}${name}.service"
