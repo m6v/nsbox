@@ -32,6 +32,52 @@ EOF
     exit 1
 }
 
+# Функция экспорта универсального X11-ключа авторизации в /root/.Xauthority
+get_xauth() {
+    # Путь для сохранения X11-ключа авторизации 
+    container_xauth="${1:-/run/.Xauthority}"
+
+    # Поиск ID активной графической сессии (seat0 — это физический монитор/клавиатура)
+    SESSION_ID=$(loginctl list-seats | grep seat0 | awk '{print $2}' || loginctl list-sessions | grep " graphical " | head -n1 | awk '{print $1}')
+
+    # Если через seat0 не нашлось, использование первой активной сессии
+    if [ -z "$SESSION_ID" ]; then
+        SESSION_ID=$(loginctl list-sessions --no-legend | awk '{print $1}' | head -n1)
+    fi
+
+    # Получение имени пользователя и номера дисплея из свойств сессии
+    USER_NAME=$(loginctl show-session "$SESSION_ID" -p Name --value)
+    DISPLAY_NUM=$(loginctl show-session "$SESSION_ID" -p Display --value)
+
+    # Если logind не отдал DISPLAY, использование значения по умолчанию :0
+    if [ -z "$DISPLAY_NUM" ]; then
+        DISPLAY_NUM=":0"
+    fi
+
+    # Стандартный путь .Xauthority в домашнем каталоге пользователя
+    USER_XAUTH="/home/${USER_NAME}/.Xauthority"
+
+    # Если .Xauthority нет по стандартному пути, проверка переменной XAUTHORITY в окружении сессии
+    if [ ! -f "$USER_XAUTH" ]; then
+        eval "$(loginctl show-session "$SESSION_ID" -p Environment | sed 's/Environment=//')"
+        # Если в окружении сессии есть XAUTHORITY, использование его
+        for env in $(loginctl show-session "$SESSION_ID" -p Environment --value); do
+            if [[ "$env" == XAUTHORITY=* ]]; then
+                USER_XAUTH="${env#*=}"
+            fi
+        done
+    fi
+
+    if [ -n "$USER_NAME" ] && [ -f "$USER_XAUTH" ]; then
+        # Экспорт куки X11 из файла пользователя в общий файл контейнера
+        XAUTHORITY="$USER_XAUTH" xauth -f "$USER_XAUTH" nextract - "$DISPLAY_NUM" | sed 's/^..../ffff/' | xauth -f "$container_xauth" nmerge -
+        chmod 644 "$container_xauth"
+    else
+        echo "Ошибка: Не удалось определить пользователя или найти его .Xauthority"
+        # exit 1
+    fi
+}
+
 list() {
     machinectl list 2>/dev/null || echo " (нет запущенных)"
     echo ""
@@ -45,6 +91,9 @@ start() {
         echo "Контейнер '${name}' уже запущен."
         return 0
     fi
+
+    # Экспорт универсального X11-ключа авторизации (нужно только для запуска графических приложений)
+    get_xauth "/run/.Xauthority"
 
     # Создание дефолтного файла конфигурации
     mkdir -p /etc/systemd/nspawn && cp -n /etc/systemd/nspawn/config.tmpl /etc/systemd/nspawn/${name}.nspawn
@@ -89,11 +138,14 @@ execute() {
     # Если команда не передана, запуск /bin/sh в режиме шелла входа (-l, login shell)
     if [ $# -eq 0 ]; then set -- /bin/sh -l; fi
 
+    # Установка DISPLAY и XAUTHORITY нужна только для запуска графических приложений
     exec nsenter --target "$pid" --mount --uts --ipc --net --pid -- \
         env -i \
         TERM="${TERM:-xterm-256color}" \
         PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
         HOME="/root" \
+        DISPLAY=":0" \
+        XAUTHORITY="/root/.Xauthority" \
         "$@"
 }
 

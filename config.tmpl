@@ -12,6 +12,11 @@ VirtualEthernet=yes
 # Проброс конфига DNS в режиме Read-Only
 BindReadOnly=/etc/resolv.conf
 
+# Проброс сокета X11 и .Xauthority
+Bind=/tmp/.X11-unix
+# NB! Вместо проброса файла, почему-то создается пустой каталог
+# BindReadOnly=/var/lib/rigger:/root/.Xauthority
+
 [Exec]
 # Вариант загрузки
 Boot=no
@@ -19,6 +24,9 @@ Boot=no
 # Ограничения ресурсов
 # LimitMEMORY=2G
 # CPUQuota=50%
+
+# Передача переменной DISPLAY (обычно :0)
+Environment=DISPLAY=:0
 
 # Программа, запускаемая при старте контейнера
 # Parameters=/entrypoint.sh

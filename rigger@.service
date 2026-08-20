@@ -24,7 +24,7 @@ ExecStartPre=/bin/sh -c '[ -z "$(/usr/bin/ls -A ${STORAGE_ROOT}/%i/lower)" ] && 
 ExecStartPre=/usr/bin/mount -t overlay overlay -o lowerdir=${STORAGE_ROOT}/%i/lower,upperdir=${STORAGE_ROOT}/%i/upper,workdir=${STORAGE_ROOT}/%i/work ${STORAGE_ROOT}/%i/merged
 
 # Запуск контейнера с параметрами, указанными в опциональном файле /etc/systemd/nspawn/%i.nspawn
-ExecStart=/usr/bin/systemd-nspawn --quiet --machine=%i -D ${STORAGE_ROOT}/%i/merged
+ExecStart=/usr/bin/systemd-nspawn --quiet --machine=%i -D ${STORAGE_ROOT}/%i/merged --setenv=DISPLAY=:0 --setenv=XAUTHORITY=/root/.Xauthority
 
 # Считать код 1 успешным (специфика завершения sleep infinity при SIGTERM)
 SuccessExitStatus=1
