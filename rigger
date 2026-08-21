@@ -34,50 +34,54 @@ EOF
 
 # Функция экспорта универсального X11-ключа авторизации в /root/.Xauthority
 get_xauth() {
-    # Путь для сохранения X11-ключа авторизации 
-    container_xauth="${1:-/run/.Xauthority}"
+    # 1. Путь для сохранения (по умолчанию пишем в /tmp/container_xauth)
+    local container_xauth="${1:-/tmp/container_xauth}"
+    
+    # Ищем сессию, привязанную к физическому монитору (seat0)
+    local SESSION_ID
+    SESSION_ID=$(loginctl list-seats 2>/dev/null | grep seat0 | awk '{print $2}' || loginctl list-sessions 2>/dev/null | grep " graphical " | head -n1 | awk '{print $1}')
 
-    # Поиск ID активной графической сессии (seat0 — это физический монитор/клавиатура)
-    SESSION_ID=$(loginctl list-seats | grep seat0 | awk '{print $2}' || loginctl list-sessions | grep " graphical " | head -n1 | awk '{print $1}')
-
-    # Если через seat0 не нашлось, использование первой активной сессии
+    # Если через seat0 не нашлось (например, это виртуальная машина), берем первую активную сессию
     if [ -z "$SESSION_ID" ]; then
-        SESSION_ID=$(loginctl list-sessions --no-legend | awk '{print $1}' | head -n1)
+        SESSION_ID=$(loginctl list-sessions --no-legend 2>/dev/null | awk '{print $1}' | head -n1)
     fi
+    echo "ID найденной сессии: '$SESSION_ID'"
 
-    # Получение имени пользователя и номера дисплея из свойств сессии
-    USER_NAME=$(loginctl show-session "$SESSION_ID" -p Name --value)
-    DISPLAY_NUM=$(loginctl show-session "$SESSION_ID" -p Display --value)
+    local USER_NAME
+    USER_NAME=$(loginctl show-session "$SESSION_ID" -p Name --value 2>/dev/null)
+    echo "Имя пользователя за монитором хоста: '$USER_NAME'"
 
-    # Если logind не отдал DISPLAY, использование значения по умолчанию :0
-    if [ -z "$DISPLAY_NUM" ]; then
-        DISPLAY_NUM=":0"
-    fi
+    # Стандартный канонический путь
+    local USER_XAUTH="/home/${USER_NAME}/.Xauthority"
 
-    # Стандартный путь .Xauthority в домашнем каталоге пользователя
-    USER_XAUTH="/home/${USER_NAME}/.Xauthority"
-
-    # Если .Xauthority нет по стандартному пути, проверка переменной XAUTHORITY в окружении сессии
+    # Если файла нет по стандартному пути, ищем переменную XAUTHORITY в окружении сессии
     if [ ! -f "$USER_XAUTH" ]; then
-        eval "$(loginctl show-session "$SESSION_ID" -p Environment | sed 's/Environment=//')"
-        # Если в окружении сессии есть XAUTHORITY, использование его
-        for env in $(loginctl show-session "$SESSION_ID" -p Environment --value); do
+        echo "Файл в /home не найден. Опрашиваем окружение сессии через loginctl..."
+        for env in $(loginctl show-session "$SESSION_ID" -p Environment --value 2>/dev/null); do
             if [[ "$env" == XAUTHORITY=* ]]; then
                 USER_XAUTH="${env#*=}"
             fi
         done
     fi
+    echo "Целевой путь к исходному файлу ключей: '$USER_XAUTH'"
 
     if [ -n "$USER_NAME" ] && [ -f "$USER_XAUTH" ]; then
-        # Экспорт куки X11 из файла пользователя в общий файл контейнера
-        XAUTHORITY="$USER_XAUTH" xauth -f "$USER_XAUTH" nextract - "$DISPLAY_NUM" | sed 's/^..../ffff/' | xauth -f "$container_xauth" nmerge -
+        # Гарантируем, что целевая папка для файла контейнера существует
+        mkdir -p "$(dirname "$container_xauth")"
+        
+        # Копируем файл, намертво стирая мандатные метки Astra Linux (Parsec)
+        cp --no-preserve=mode,ownership,xattr "$USER_XAUTH" "$container_xauth"
+        
+        # Выставляем права (644 чтобы контейнер гарантированно прочитал)
         chmod 644 "$container_xauth"
+        
+        echo "Файл успешно создан по пути: $container_xauth"
+        echo "Размер созданного файла: $(stat -c %s "$container_xauth") байт"
     else
-        echo "Ошибка: Не удалось определить пользователя или найти его .Xauthority"
-        # exit 1
+        echo "Критическая ошибка: Не удалось определить пользователя или найти его .Xauthority"
+        return 1
     fi
 }
-
 list() {
     machinectl list 2>/dev/null || echo " (нет запущенных)"
     echo ""
@@ -145,7 +149,7 @@ execute() {
         PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
         HOME="/root" \
         DISPLAY=":0" \
-        XAUTHORITY="/root/.Xauthority" \
+        XAUTHORITY="/run/.Xauthority" \
         "$@"
 }
 
