@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=simple
 
-Environment="STORAGE_ROOT=/var/lib/rigger"
+Environment="STORAGE_ROOT=/var/lib/nsbox"
 
 # Размонтирование и очистка на случай старта после нештатной остановки
 ExecStartPre=-/usr/bin/umount -l ${STORAGE_ROOT}/%i/merged

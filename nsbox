@@ -3,9 +3,9 @@
 set -eu
 
 # Шаблон systemd-юнита
-SERVICE_TEMPLATE="rigger@"
+SERVICE_TEMPLATE="nsbox@"
 # Хранилище с развернутыми образами контейнеров 
-STORAGE_ROOT=/var/lib/rigger
+STORAGE_ROOT=/var/lib/nsbox
 
 # Перезапуск от root, если скрипт запущен от обычного пользователя
 if [ "$(id -u)" -ne 0 ]; then

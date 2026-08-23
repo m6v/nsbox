@@ -1,4 +1,4 @@
-_rigger_completion() {
+_nsbox_completion() {
     local cur prev
     # Текущее слово под курсором
     cur="${COMP_WORDS[COMP_CWORD]}"
@@ -29,5 +29,5 @@ _rigger_completion() {
     fi
 }
 
-# Привязка автодополнения к имени утилиты rigger
-complete -F _rigger_completion rigger
+# Привязка автодополнения к имени утилиты nsbox
+complete -F _nsbox_completion nsbox

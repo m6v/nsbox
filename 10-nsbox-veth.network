@@ -1,4 +1,4 @@
-# /etc/systemd/network/10-rigger-veth.conf
+# /etc/systemd/network/10-nsbox-veth.conf
 
 [Match]
 Name=ve-*
