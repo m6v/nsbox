@@ -82,6 +82,7 @@ get_xauth() {
         return 1
     fi
 }
+
 list() {
     machinectl list 2>/dev/null || echo " (нет запущенных)"
     echo ""
@@ -90,33 +91,86 @@ list() {
 
 start() {
     name="$1"
-    # Проверка запущен контейнер или нет
+    SERVICE_NAME="nsbox@${name}.service"
+
+    # Проверка запущен ли контейнер
     if machinectl show "$name" >/dev/null 2>&1; then
         echo "Контейнер '${name}' уже запущен."
         return 0
     fi
 
-    # Экспорт универсального X11-ключа авторизации (нужно только для запуска графических приложений)
-    get_xauth "/run/.Xauthority"
+    # Перенаправление в systemd, если скрипт запущен вручную в терминале
+    if [ -t 0 ]; then
+        echo "Запрос на запуск контейнера '$name' отправлен, смотри логи journalctl -u nsbox@$name..."
+        # Флаг --no-block освобождает консоль и завершает команду
+        systemctl start --no-block "$SERVICE_NAME"
+        exit 0
+    fi
 
-    # Создание дефолтного файла конфигурации
-    mkdir -p /etc/systemd/nspawn && cp -n /etc/systemd/nspawn/config.tmpl /etc/systemd/nspawn/${name}.nspawn
+    # Следуюшие команды выполняются только из ExecStart=/usr/local/bin/nsbox start %i
+    echo "Создание дефолтного файла конфигурации /etc/systemd/nspawn/${name}.nspawn"
+    mkdir -p /etc/systemd/nspawn
+    cp -n /etc/systemd/nspawn/config.tmpl "/etc/systemd/nspawn/${name}.nspawn" 2>/dev/null || true
 
     echo "Запуск контейнера '${name}'..."
-    systemctl start "${SERVICE_TEMPLATE}${name}.service"
-    echo "Готово."
+
+    LOWER="${STORAGE_ROOT}/${name}/lower"
+    UPPER="${STORAGE_ROOT}/${name}/upper"
+    WORK="${STORAGE_ROOT}/${name}/work"
+    MERGED="${STORAGE_ROOT}/${name}/merged"
+
+    # Размонтирование и очистка на случай старта после нештатной остановки
+    umount -l "$MERGED" 2>/dev/null || true
+    umount -l "$LOWER" 2>/dev/null || true
+    mkdir -p "$LOWER" "$UPPER" "$WORK" "$MERGED"
+    find "$WORK" -mindepth 1 -delete
+
+    # Монтирование хоста в ro, если lower пустой
+    if [ -z "$(ls -A "$LOWER")" ]; then
+        mount --bind -o ro / "$LOWER"
+    fi
+
+    # Монтирование оверлея
+    mount -t overlay overlay -o "lowerdir=${LOWER},upperdir=${UPPER},workdir=${WORK}" "$MERGED"
+    
+    # Передача управления контейнеру (systemd видит именно systemd-nspawn)
+    exec /usr/bin/systemd-nspawn \
+        --quiet \
+        --machine="${name}" \
+        -D "$MERGED"
 }
 
 stop() {
     name="$1"
-    # Проверка запущен контейнер или нет
-    if ! machinectl show "$name" >/dev/null 2>&1; then
-        echo "Контейнер '${name}' уже остановлен (или не был запущен)."
-        return 0
+    SERVICE_NAME="nsbox@${name}.service"
+
+    # Перенаправление в systemd, если скрипт запущен вручную в терминале
+    if [ -t 0 ]; then
+        # Проверка запущен ли контейнер
+        if ! machinectl show "$name" >/dev/null 2>&1; then
+            echo "Контейнер '${name}' не запущен."
+            return 0
+        fi
+
+        echo "Запрос на останов контейнера '$name' отправлен, смотри логи journalctl -u nsbox@$name..."
+        # Флаг --no-block возвращает управление в терминал
+        systemctl stop --no-block "$SERVICE_NAME"
+        exit 0 
     fi
 
-    echo "Остановка контейнера '${name}'..."
-    systemctl stop "${SERVICE_TEMPLATE}${name}.service"
+    # Следуюшие команды выполняются только из ExecStopPost=/usr/local/bin/nsbox stop %i
+    echo "Очистка ресурсов для контейнера '${name}'..."
+
+    LOWER="${STORAGE_ROOT}/${name}/lower"
+    UPPER="${STORAGE_ROOT}/${name}/upper"
+    WORK="${STORAGE_ROOT}/${name}/work"
+    MERGED="${STORAGE_ROOT}/${name}/merged"
+
+    # Размонтирование и очистка рабочих директорий
+    umount -l "$MERGED" 2>/dev/null || true
+    umount -l "$LOWER" 2>/dev/null || true
+    find "$WORK" -mindepth 1 -delete 2>/dev/null || true
+
     echo "Готово."
 }
 
