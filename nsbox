@@ -101,7 +101,7 @@ start() {
 
     # Перенаправление в systemd, если скрипт запущен вручную в терминале
     if [ -t 0 ]; then
-        echo "Запрос на запуск контейнера '$name' отправлен, смотри логи journalctl -u nsbox@$name..."
+        echo "Запрос на запуск контейнера '$name' отправлен, смотри логи journalctl -u nsbox@$name"
         # Флаг --no-block освобождает консоль и завершает команду
         systemctl start --no-block "$SERVICE_NAME"
         exit 0
@@ -152,7 +152,7 @@ stop() {
             return 0
         fi
 
-        echo "Запрос на останов контейнера '$name' отправлен, смотри логи journalctl -u nsbox@$name..."
+        echo "Запрос на останов контейнера '$name' отправлен, смотри логи journalctl -u nsbox@$name"
         # Флаг --no-block возвращает управление в терминал
         systemctl stop --no-block "$SERVICE_NAME"
         exit 0 
