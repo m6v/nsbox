@@ -128,16 +128,18 @@ start() {
     if [ -z "$(ls -A "$LOWER")" ]; then
         echo "Монтирование корня хоста в $LOWER..."
         mount --bind -o ro / "$LOWER"
+        mount --make-private "$LOWER"
     fi
 
     # Монтирование оверлея
     mount -t overlay overlay -o "lowerdir=${LOWER},upperdir=${UPPER},workdir=${WORK}" "$MERGED"
-    
+    ln -s "$MERGED" "/var/lib/machines/${name}"
+        
     # Передача управления контейнеру (systemd видит именно systemd-nspawn)
     exec /usr/bin/systemd-nspawn \
         --quiet \
         --machine="${name}" \
-        -D "$MERGED"
+        -D "/var/lib/machines/${name}"
 }
 
 stop() {
@@ -164,6 +166,11 @@ stop() {
     UPPER="${STORAGE_ROOT}/${name}/upper"
     WORK="${STORAGE_ROOT}/${name}/work"
     MERGED="${STORAGE_ROOT}/${name}/merged"
+
+    # Удаление если симлинк
+    if [ -L "/var/lib/machines/${name}" ]; then
+        rm "/var/lib/machines/${name}"
+    fi
 
     # Размонтирование и очистка рабочих директорий
     umount -l "$MERGED" 2>/dev/null || true
