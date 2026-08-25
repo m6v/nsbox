@@ -14,12 +14,6 @@ BASH_COMPLETION_DIR = $(DESTDIR)$(EXEC_PREFIX)/share/bash-completion/completions
 INSTALL_DATA = install -m 0644 -D
 INSTALL_EXEC = install -m 0755 -D
 
-# Параметры пакета
-PKG_NAME    = nsbox
-PKG_VERSION = 0.4.$(shell git rev-list --count HEAD 2>/dev/null || echo "0")
-PKG_ARCH    = all
-PKG_DIR     = build_deb
-
 .PHONY: all install install-bin install-completion install-service install-network install-nspawn install-nftables reload check deb clean help
 
 all: help
@@ -30,7 +24,7 @@ install: install-bin install-completion install-service install-network install-
 ## Установка утилит управления
 install-bin:
 	$(INSTALL_EXEC) nsbox $(BIN_DIR)/nsbox
-	$(INSTALL_EXEC) d2r.py $(BIN_DIR)/d2r
+	$(INSTALL_EXEC) d2r $(BIN_DIR)/d2r
 
 ## Установка bash-completion
 install-completion:
@@ -75,26 +69,33 @@ reload:
 
 ## Сборка DEB-пакета
 deb: clean check
-	@mkdir -p $(PKG_DIR)/DEBIAN
-	@echo "Package: $(PKG_NAME)" > $(PKG_DIR)/DEBIAN/control
-	@echo "Version: $(PKG_VERSION)" >> $(PKG_DIR)/DEBIAN/control
-	@echo "Section: utils" >> $(PKG_DIR)/DEBIAN/control
-	@echo "Priority: optional" >> $(PKG_DIR)/DEBIAN/control
-	@echo "Architecture: $(PKG_ARCH)" >> $(PKG_DIR)/DEBIAN/control
-	@echo "Depends: systemd-container, python3, nftables" >> $(PKG_DIR)/DEBIAN/control
-	@echo "Maintainer: Sergey Maksimov <m6v@mail.ru>" >> $(PKG_DIR)/DEBIAN/control
-	@echo "Description: Инструмент управления контейнерами systemd-nspawn" >> $(PKG_DIR)/DEBIAN/control
-	@echo " Автоматизация развертывания, сетевой конфигурации veth/vbridge" >> $(PKG_DIR)/DEBIAN/control
-	@echo " и интеграция с правилами трансляции адресов nftables." >> $(PKG_DIR)/DEBIAN/control
-	@if [ -f postinst ]; then $(INSTALL_EXEC) postinst $(PKG_DIR)/DEBIAN/postinst; fi
-	@if [ -f postrm ]; then $(INSTALL_EXEC) postrm $(PKG_DIR)/DEBIAN/postrm; fi
-	@$(MAKE) --no-print-directory install DESTDIR=$(CURDIR)/$(PKG_DIR)
-	dpkg-deb --build $(PKG_DIR) $(PKG_NAME)_$(PKG_VERSION)_$(PKG_ARCH).deb
-	@rm -rf $(PKG_DIR)
+	@echo "Чтение шаблона deb-пакета..."
+	$(eval PKG_NAME := $(shell awk '/^Package:/ {print $$2}' control))
+	$(eval BASE_VER  := $(shell awk '/^Version:/ {print $$2}' control))
+	$(eval PKG_ARCH := $(shell awk '/^Architecture:/ {print $$2}' control))
+
+	$(eval GIT_REV  := $(shell git rev-list --count HEAD 2>/dev/null || echo 0))
+	$(eval PKG_VER  := $(BASE_VER).$(GIT_REV))
+
+	$(eval TMP_BUILD_DIR := $(shell mktemp -d /tmp/deb-build.XXXXXX))
+
+	@echo "Подготовка структуры deb-пакета..."
+	@mkdir -p $(TMP_BUILD_DIR)/DEBIAN
+	@cp control $(TMP_BUILD_DIR)/DEBIAN/control
+
+	@if [ -f postinst ]; then $(INSTALL_EXEC) postinst $(TMP_BUILD_DIR)/DEBIAN/postinst; fi
+	@if [ -f postrm ]; then $(INSTALL_EXEC) postrm $(TMP_BUILD_DIR)/DEBIAN/postrm; fi
+
+	@$(MAKE) --no-print-directory install DESTDIR=$(TMP_BUILD_DIR)
+
+	@echo "Сборка deb-пакета..."
+	@sudo dpkg-deb --build $(TMP_BUILD_DIR) $(PKG_NAME)_$(PKG_VER)_$(PKG_ARCH).deb
+	@rm -rf $(TMP_BUILD_DIR)
+	@echo "Пакет успешно собран: $(PKG_NAME)_$(PKG_VER)_$(PKG_ARCH).deb"
 
 ## Очистка временных файлов сборки и старых пакетов
 clean:
-	rm -rf $(PKG_DIR)
+	$(eval PKG_NAME := $(shell awk '/^Package:/ {print $$2}' control))
 	rm -f $(PKG_NAME)_*.deb
 
 help:

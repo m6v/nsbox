@@ -2,17 +2,18 @@
 
 - `nsbox` - скрипт для управления контейнерами `systemd-nspawn`
 - `nsbox@.service` - шаблон службы для запуска контейнеров `systemd-nspawn`
-- `d2r.py` - скрипт для создания контейнеров на базе образов docker
+- `d2r` - скрипт для создания контейнеров на базе образов docker
+- `nsbox.sh` и `nsinit.sh` - старая реализация контейнеров в чистом bash, без использования systemd-nspawn
 
-Контейнер использует оверлей, создаваемый в каталоге `/var/lib/nsbox/<container_name>` и обычной структурой подкаталогов: `lower`, `upper`, `work`, `merged`. Перед запуском в каталоге lower необходимо развернуть корневую файловую систему контейнера. Если при запуске контейнера каталог нижнего слоя отсутствует или пустой, в него автоматически монтируется корень файловой системы хоста.
+Пи запуске nsbox проверяет наличие каталога /var/lib/machines/<container_name> и при отсутствии создает оверлей в каталоге `/var/lib/nsbox/<container_name>` и обычной структурой подкаталогов: `lower`, `upper`, `work`, `merged`. В `lower` монтируется корень хоста. После создания оверлея в /var/lib/machines/ создается симлинк на каталог `merged`
 
-Для создания файловой системы контейнера можно использовать утилиты типа `debootstrap` или срипт `d2r.py`, автоматизирующий процесс загрузки и развертывания образов docker.
+Для создания файловой системы контейнера в /var/lib/machines/<container_name> можно использовать утилиты типа `debootstrap` или срипт `d2r`, автоматизирующий процесс загрузки и развертывания образов docker.
 
 Пример использования
 ```bash
 sudo -i
-mkdir -p /var/lib/nsbox/debian/lower
-d2r.py debian /var/lib/nsbox/debian/lower
+mkdir -p /var/lib/machines/debian-container
+d2r debian /var/lib/machines/debian-container
 ```
 
 При запуске службы `nsbox@<container_name>.service`, утилита `systemd-nspawn` проверяет, наличие файла конфигурации имя которого задано в параметре `--machine=<container_name>`, а расширение `.nspawn` в каталоге `/etc/systemd/nspawn`.
