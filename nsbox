@@ -91,7 +91,6 @@ list() {
 
 start() {
     name="$1"
-    SERVICE_NAME="nsbox@${name}.service"
 
     # Проверка запущен ли контейнер
     if machinectl show "$name" >/dev/null 2>&1; then
@@ -102,13 +101,13 @@ start() {
     # Перенаправление в systemd, если скрипт запущен вручную в терминале
     if [ -t 0 ]; then
         echo "Запрос на запуск контейнера '$name' отправлен, смотри логи journalctl -u nsbox@$name"
-        # Флаг --no-block освобождает консоль и завершает команду
-        systemctl start --no-block "$SERVICE_NAME"
+        # Флаг --no-block освобождает консоль
+        systemctl start --no-block "nsbox@${name}.service"
         exit 0
     fi
 
     # Следуюшие команды выполняются только из ExecStart=/usr/local/bin/nsbox start %i
-    echo "Создание дефолтного файла конфигурации /etc/systemd/nspawn/${name}.nspawn"
+    echo "Создание файла конфигурации /etc/systemd/nspawn/${name}.nspawn"
     mkdir -p /etc/systemd/nspawn
     cp -n /etc/systemd/nspawn/config.tmpl "/etc/systemd/nspawn/${name}.nspawn" 2>/dev/null || true
 
@@ -122,11 +121,12 @@ start() {
     # Размонтирование и очистка на случай старта после нештатной остановки
     umount -l "$MERGED" 2>/dev/null || true
     umount -l "$LOWER" 2>/dev/null || true
+    find "$WORK" -mindepth 1 -delete || true
     mkdir -p "$LOWER" "$UPPER" "$WORK" "$MERGED"
-    find "$WORK" -mindepth 1 -delete
 
     # Монтирование хоста в ro, если lower пустой
     if [ -z "$(ls -A "$LOWER")" ]; then
+        echo "Монтирование корня хоста в $LOWER..."
         mount --bind -o ro / "$LOWER"
     fi
 
@@ -142,7 +142,6 @@ start() {
 
 stop() {
     name="$1"
-    SERVICE_NAME="nsbox@${name}.service"
 
     # Перенаправление в systemd, если скрипт запущен вручную в терминале
     if [ -t 0 ]; then
@@ -154,7 +153,7 @@ stop() {
 
         echo "Запрос на останов контейнера '$name' отправлен, смотри логи journalctl -u nsbox@$name"
         # Флаг --no-block возвращает управление в терминал
-        systemctl stop --no-block "$SERVICE_NAME"
+        systemctl stop --no-block "nsbox@${name}.service"
         exit 0 
     fi
 
