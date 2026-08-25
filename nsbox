@@ -25,6 +25,7 @@ $(basename "$0") — это легковесный инструмент для �
   restart <container>    Перезапустить контейнер
   exec <container> [cmd] Выполнить cmd в контейнере (по умолчанию /bin/sh)
   show <container>       Показать статус контейнера и юнита
+  status <container>     Вывести статус контейнера
   log <container>        Вывести логи службы контейнера
   destroy <container>    Уничтожить контейнер (удалить ${STORAGE_ROOT}/<container>)
   help                   Показать эту справку и выйти
@@ -100,7 +101,7 @@ start() {
 
     # Перенаправление в systemd, если скрипт запущен вручную в терминале
     if [ -t 0 ]; then
-        echo "Запрос на запуск контейнера '$name' отправлен, смотри логи journalctl -u nsbox@$name"
+        echo "Запрос на запуск контейнера '$name' отправлен, смотри логи nsbox log $name"
         # Флаг --no-block освобождает консоль
         systemctl start --no-block "nsbox@${name}.service"
         exit 0
@@ -113,29 +114,29 @@ start() {
 
     echo "Запуск контейнера '${name}'..."
 
-    LOWER="${STORAGE_ROOT}/${name}/lower"
-    UPPER="${STORAGE_ROOT}/${name}/upper"
-    WORK="${STORAGE_ROOT}/${name}/work"
-    MERGED="${STORAGE_ROOT}/${name}/merged"
+    # Если целевого каталога нет, подготовка каталога с оверлеем
+    if [ ! -d "/var/lib/machines/${name}" ]; then
+        LOWER="${STORAGE_ROOT}/${name}/lower"
+        UPPER="${STORAGE_ROOT}/${name}/upper"
+        WORK="${STORAGE_ROOT}/${name}/work"
+        MERGED="${STORAGE_ROOT}/${name}/merged"
 
-    # Размонтирование и очистка на случай старта после нештатной остановки
-    umount -l "$MERGED" 2>/dev/null || true
-    umount -l "$LOWER" 2>/dev/null || true
-    find "$WORK" -mindepth 1 -delete || true
-    mkdir -p "$LOWER" "$UPPER" "$WORK" "$MERGED"
+        # Размонтирование и очистка на случай старта после нештатной остановки
+        umount -l "$MERGED" 2>/dev/null || true
+        umount -l "$LOWER" 2>/dev/null || true
+        find "$WORK" -mindepth 1 -delete || true
+        mkdir -p "$LOWER" "$UPPER" "$WORK" "$MERGED"
 
-    # Монтирование хоста в ro, если lower пустой
-    if [ -z "$(ls -A "$LOWER")" ]; then
         echo "Монтирование корня хоста в $LOWER..."
         mount --bind -o ro / "$LOWER"
         mount --make-private "$LOWER"
+
+        # Монтирование оверлея
+        mount -t overlay overlay -o "lowerdir=${LOWER},upperdir=${UPPER},workdir=${WORK}" "$MERGED"
+        ln -s "$MERGED" "/var/lib/machines/${name}"
     fi
 
-    # Монтирование оверлея
-    mount -t overlay overlay -o "lowerdir=${LOWER},upperdir=${UPPER},workdir=${WORK}" "$MERGED"
-    ln -s "$MERGED" "/var/lib/machines/${name}"
-        
-    # Передача управления контейнеру (systemd видит именно systemd-nspawn)
+    # Передача управления контейнеру (systemd контролирует systemd-nspawn)
     exec /usr/bin/systemd-nspawn \
         --quiet \
         --machine="${name}" \
@@ -153,7 +154,10 @@ stop() {
             return 0
         fi
 
-        echo "Запрос на останов контейнера '$name' отправлен, смотри логи journalctl -u nsbox@$name"
+        # Отправка сигнала SIGTERM лидеру процесса (для вызова в entrypoint.sh функции on_close)
+        machinectl kill --kill-who=leader --signal=SIGTERM "${name}"
+
+        echo "Запрос на останов контейнера '$name' отправлен, смотри логи nsbox log $name"
         # Флаг --no-block возвращает управление в терминал
         systemctl stop --no-block "nsbox@${name}.service"
         exit 0 
@@ -162,20 +166,20 @@ stop() {
     # Следуюшие команды выполняются только из ExecStopPost=/usr/local/bin/nsbox stop %i
     echo "Очистка ресурсов для контейнера '${name}'..."
 
-    LOWER="${STORAGE_ROOT}/${name}/lower"
-    UPPER="${STORAGE_ROOT}/${name}/upper"
-    WORK="${STORAGE_ROOT}/${name}/work"
-    MERGED="${STORAGE_ROOT}/${name}/merged"
-
-    # Удаление если симлинк
+    # Очистка оверлея если симлинк
     if [ -L "/var/lib/machines/${name}" ]; then
+        LOWER="${STORAGE_ROOT}/${name}/lower"
+        UPPER="${STORAGE_ROOT}/${name}/upper"
+        WORK="${STORAGE_ROOT}/${name}/work"
+        MERGED="${STORAGE_ROOT}/${name}/merged"
+
+        # Размонтирование и очистка рабочих директорий
+        umount -l "$MERGED" 2>/dev/null || true
+        umount -l "$LOWER" 2>/dev/null || true
+        find "$WORK" -mindepth 1 -delete 2>/dev/null || true
+
         rm "/var/lib/machines/${name}"
     fi
-
-    # Размонтирование и очистка рабочих директорий
-    umount -l "$MERGED" 2>/dev/null || true
-    umount -l "$LOWER" 2>/dev/null || true
-    find "$WORK" -mindepth 1 -delete 2>/dev/null || true
 
     echo "Готово."
 }
@@ -251,9 +255,14 @@ destroy() {
     rm -f /etc/systemd/nspawn/${name}.nspawn
 }
 
+status() {
+    name="$1"
+    machinectl status $name
+}
+
 log() {
-    name="${1:-*}"
-    journalctl -u systemd-nspawn@"$name" --no-pager
+    name="$1"
+    journalctl -u nsbox@$name --no-pager
 }
 
 # Проверка минимального количества аргументов
@@ -266,7 +275,7 @@ shift
 [ "$ACTION" = "help" ] && ACTION="usage"
 
 case "$ACTION" in
-    list|start|stop|restart|execute|show|destroy|log|usage) ;;
+    list|start|stop|restart|execute|show|destroy|status|log|usage) ;;
     *)
         echo "Ошибка: неизвестная команда '$ACTION'" >&2
         usage ;;

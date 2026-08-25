@@ -1,8 +1,16 @@
 #!/bin/sh
-# Точка входа для контейнеров systemd-nspawn
+# Дефолтная точка входа для контейнеров nsbox (systemd-nspawn)
+
+on_exit() {
+    echo "Stopping background processes..."
+    # Здесь выполнять необходимые действия для корректного завершения работы
+    exit 0
+}
+trap "on_exit" EXIT SIGTERM SIGINT
 
 # Включение виртуального интерфейса, с настройками в /etc/network/interfaces
 ifup host0
 
-# Бесконечное ожидание
-exec sleep infinity
+# Запуск sleep в фоне и ожидание с помощью wait, который перехватывает сигналы завершения работы
+sleep infinity &
+wait $!

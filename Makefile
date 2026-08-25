@@ -16,7 +16,7 @@ INSTALL_EXEC = install -m 0755 -D
 
 # Параметры пакета
 PKG_NAME    = nsbox
-PKG_VERSION = 0.2.$(shell git rev-list --count HEAD 2>/dev/null || echo "0")
+PKG_VERSION = 0.4.$(shell git rev-list --count HEAD 2>/dev/null || echo "0")
 PKG_ARCH    = all
 PKG_DIR     = build_deb
 
