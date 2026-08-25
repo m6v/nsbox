@@ -4,8 +4,10 @@ set -eu
 
 # Шаблон systemd-юнита
 SERVICE_TEMPLATE="nsbox@"
-# Хранилище с развернутыми образами контейнеров 
+# Хранилище с развернутыми образами оверлеев 
 STORAGE_ROOT=/var/lib/nsbox
+# Стандартный путь machinectl
+MACHINES_ROOT=/var/lib/machines
 
 # Перезапуск от root, если скрипт запущен от обычного пользователя
 if [ "$(id -u)" -ne 0 ]; then
@@ -31,57 +33,6 @@ $(basename "$0") — это легковесный инструмент для �
   help                   Показать эту справку и выйти
 EOF
     exit 1
-}
-
-# Функция экспорта универсального X11-ключа авторизации в /root/.Xauthority
-get_xauth() {
-    # 1. Путь для сохранения (по умолчанию пишем в /tmp/container_xauth)
-    local container_xauth="${1:-/tmp/container_xauth}"
-    
-    # Ищем сессию, привязанную к физическому монитору (seat0)
-    local SESSION_ID
-    SESSION_ID=$(loginctl list-seats 2>/dev/null | grep seat0 | awk '{print $2}' || loginctl list-sessions 2>/dev/null | grep " graphical " | head -n1 | awk '{print $1}')
-
-    # Если через seat0 не нашлось (например, это виртуальная машина), берем первую активную сессию
-    if [ -z "$SESSION_ID" ]; then
-        SESSION_ID=$(loginctl list-sessions --no-legend 2>/dev/null | awk '{print $1}' | head -n1)
-    fi
-    echo "ID найденной сессии: '$SESSION_ID'"
-
-    local USER_NAME
-    USER_NAME=$(loginctl show-session "$SESSION_ID" -p Name --value 2>/dev/null)
-    echo "Имя пользователя за монитором хоста: '$USER_NAME'"
-
-    # Стандартный канонический путь
-    local USER_XAUTH="/home/${USER_NAME}/.Xauthority"
-
-    # Если файла нет по стандартному пути, ищем переменную XAUTHORITY в окружении сессии
-    if [ ! -f "$USER_XAUTH" ]; then
-        echo "Файл в /home не найден. Опрашиваем окружение сессии через loginctl..."
-        for env in $(loginctl show-session "$SESSION_ID" -p Environment --value 2>/dev/null); do
-            if [[ "$env" == XAUTHORITY=* ]]; then
-                USER_XAUTH="${env#*=}"
-            fi
-        done
-    fi
-    echo "Целевой путь к исходному файлу ключей: '$USER_XAUTH'"
-
-    if [ -n "$USER_NAME" ] && [ -f "$USER_XAUTH" ]; then
-        # Гарантируем, что целевая папка для файла контейнера существует
-        mkdir -p "$(dirname "$container_xauth")"
-        
-        # Копируем файл, намертво стирая мандатные метки Astra Linux (Parsec)
-        cp --no-preserve=mode,ownership,xattr "$USER_XAUTH" "$container_xauth"
-        
-        # Выставляем права (644 чтобы контейнер гарантированно прочитал)
-        chmod 644 "$container_xauth"
-        
-        echo "Файл успешно создан по пути: $container_xauth"
-        echo "Размер созданного файла: $(stat -c %s "$container_xauth") байт"
-    else
-        echo "Критическая ошибка: Не удалось определить пользователя или найти его .Xauthority"
-        return 1
-    fi
 }
 
 list() {
@@ -115,7 +66,7 @@ start() {
     echo "Запуск контейнера '${name}'..."
 
     # Если целевого каталога нет, подготовка каталога с оверлеем
-    if [ ! -d "/var/lib/machines/${name}" ]; then
+    if [ ! -d "${MACHINES_ROOT}/${name}" ]; then
         LOWER="${STORAGE_ROOT}/${name}/lower"
         UPPER="${STORAGE_ROOT}/${name}/upper"
         WORK="${STORAGE_ROOT}/${name}/work"
@@ -126,6 +77,9 @@ start() {
         umount -l "$LOWER" 2>/dev/null || true
         find "$WORK" -mindepth 1 -delete || true
         mkdir -p "$LOWER" "$UPPER" "$WORK" "$MERGED"
+        
+        # Копирование шаблона дефолтной точки входа
+        cp -n "${STORAGE_ROOT}/entrypoint.sh" "$UPPER"
 
         echo "Монтирование корня хоста в $LOWER..."
         mount --bind -o ro / "$LOWER"
@@ -133,14 +87,14 @@ start() {
 
         # Монтирование оверлея
         mount -t overlay overlay -o "lowerdir=${LOWER},upperdir=${UPPER},workdir=${WORK}" "$MERGED"
-        ln -s "$MERGED" "/var/lib/machines/${name}"
+        ln -s "$MERGED" "${MACHINES_ROOT}/${name}"
     fi
 
     # Передача управления контейнеру (systemd контролирует systemd-nspawn)
     exec /usr/bin/systemd-nspawn \
         --quiet \
         --machine="${name}" \
-        -D "/var/lib/machines/${name}"
+        -D "${MACHINES_ROOT}/${name}"
 }
 
 stop() {
@@ -166,8 +120,8 @@ stop() {
     # Следуюшие команды выполняются только из ExecStopPost=/usr/local/bin/nsbox stop %i
     echo "Очистка ресурсов для контейнера '${name}'..."
 
-    # Очистка оверлея если симлинк
-    if [ -L "/var/lib/machines/${name}" ]; then
+    # Очистка оверлея если это симлинк
+    if [ -L "${MACHINES_ROOT}/${name}" ]; then
         LOWER="${STORAGE_ROOT}/${name}/lower"
         UPPER="${STORAGE_ROOT}/${name}/upper"
         WORK="${STORAGE_ROOT}/${name}/work"
@@ -178,7 +132,7 @@ stop() {
         umount -l "$LOWER" 2>/dev/null || true
         find "$WORK" -mindepth 1 -delete 2>/dev/null || true
 
-        rm "/var/lib/machines/${name}"
+        rm "${MACHINES_ROOT}/${name}"
     fi
 
     echo "Готово."
@@ -212,6 +166,7 @@ execute() {
         TERM="${TERM:-xterm-256color}" \
         PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
         HOME="/root" \
+        LANG="${LANG:-en_US.UTF-8}" \
         DISPLAY=":0" \
         XAUTHORITY="/run/.Xauthority" \
         "$@"
@@ -230,29 +185,30 @@ show() {
 
 destroy() {
     name="$1"
-    # Проверяем, запущен ли контейнер в machined
     if machinectl show "$name" >/dev/null 2>&1; then
-        echo "Ошибка: Контейнер '$name' сейчас запущен!" >&2
-        echo "Остановите его перед удалением: $(basename "$0") stop $name" >&2
+        echo "Ошибка: Контейнер '$name' запущен, остановите перед удалением." >&2
         exit 1
     fi
 
-    printf "Вы действительно хотите удалить контейнер? [y/N] "
+    printf "Удалить контейнер '$name'? [y/N] "
     read -r response
     if [ "$response" != "y" ] && [ "$response" != "Y" ]; then
         exit 0
     fi
 
-    dir="${STORAGE_ROOT}/$name"
-    if [ -d "$dir" ]; then
-        echo "Удаление $dir..."
-        rm -rf "$dir"
-        echo "Контейнер успешно удален"
-    else
-        echo "Каталог $dir не найден"
+    # Чтобы обезопасить удаление преобразуем name через systemd-escape, 
+    # если содержит спецсимволы, слэши или точки, вернет код ошибки
+    systemd-escape --mangle "$name" >/dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        exit 1
     fi
+
+    # Удаление каталогов контейнера, если существуют
+    rm -rfv "${MACHINES_ROOT}/${name}"
+    rm -rfv "${STORAGE_ROOT}/${name}"
+
     # Удаление файла конфигурации, если существует
-    rm -f /etc/systemd/nspawn/${name}.nspawn
+    rm -fv /etc/systemd/nspawn/${name}.nspawn
 }
 
 status() {

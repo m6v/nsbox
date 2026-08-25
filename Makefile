@@ -7,6 +7,7 @@ NETWORK_DIR         = $(DESTDIR)$(PREFIX)/systemd/network
 NSPAWN_DIR          = $(DESTDIR)$(PREFIX)/systemd/nspawn
 NFTABLES_CONF       = $(DESTDIR)$(PREFIX)/nftables.conf
 NFTABLES_DIR        = $(DESTDIR)$(PREFIX)/nftables.d
+NSBOX_DIR           = $(DESTDIR)/var/lib/nsbox
 
 BIN_DIR             = $(DESTDIR)$(EXEC_PREFIX)/bin
 BASH_COMPLETION_DIR = $(DESTDIR)$(EXEC_PREFIX)/share/bash-completion/completions
@@ -14,12 +15,12 @@ BASH_COMPLETION_DIR = $(DESTDIR)$(EXEC_PREFIX)/share/bash-completion/completions
 INSTALL_DATA = install -m 0644 -D
 INSTALL_EXEC = install -m 0755 -D
 
-.PHONY: all install install-bin install-completion install-service install-network install-nspawn install-nftables reload check deb clean help
+.PHONY: all install install-bin install-completion install-service install-network install-templates install-nftables reload check deb clean help
 
 all: help
 
 ## Установка всех компонентов, настройка nftables и перезапуск службы
-install: install-bin install-completion install-service install-network install-nspawn install-nftables reload
+install: install-bin install-completion install-service install-network install-templates install-nftables reload
 
 ## Установка утилит управления
 install-bin:
@@ -43,9 +44,10 @@ install-network:
 	$(INSTALL_DATA) 21-nsbox-vbridge.network $(NETWORK_DIR)/21-nsbox-vbridge.network
 	$(INSTALL_DATA) 22-nsbox-containers.network $(NETWORK_DIR)/22-nsbox-containers.network
 
-## Установка шаблона конфигурационного файла .nspawn
-install-nspawn:
+## Установка шаблонов
+install-templates:
 	$(INSTALL_DATA) config.tmpl $(NSPAWN_DIR)/config.tmpl
+	$(INSTALL_EXEC) entrypoint.sh $(NSBOX_DIR)/entrypoint.sh
 
 ## Установка модуля nsbox-nat.conf и привязка include (только при живой установке)
 install-nftables:

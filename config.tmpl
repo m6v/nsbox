@@ -9,25 +9,19 @@ VirtualEthernet=yes
 # Port=tcp:4443:443
 
 [Files]
-# Проброс конфига DNS в режиме Read-Only
-BindReadOnly=/etc/resolv.conf
-
-# Проброс сокета X11 и .Xauthority
+# Проброс сокета X11
 Bind=/tmp/.X11-unix
-# NB! Вместо проброса файла, почему-то создается пустой каталог
-# BindReadOnly=/var/lib/nsbox:/root/.Xauthority
+
+# Проброс конфига DNS
+BindReadOnly=/etc/resolv.conf
 
 [Exec]
 # Вариант загрузки
 Boot=no
 
-# Ограничения ресурсов
-# LimitMEMORY=2G
-# CPUQuota=50%
+# В режиме Boot=no, задают только POSIX rlimits, лимиты cgroups v2
+# не применяются, переменные окружения игнорируются
 
-# Передача переменной DISPLAY (обычно :0)
-Environment=DISPLAY=:0
-
-# Программа, запускаемая при старте контейнера
+# Программа, запускаемая при старте контейнера (по умолчанию /bin/bash)
 # Parameters=/entrypoint.sh
-Parameters=/bin/sleep infinity
+# Parameters=/bin/sleep infinity
