@@ -21,6 +21,7 @@ usage() {
 $(basename "$0") — это легковесный инструмент для управления контейнерами systemd-nspawn 
 
 Команды:
+  images                 Вывести список образов
   list                   Вывести список запущенных контейнеров и юнитов
   start <container>      Запустить контейнер
   stop  <container>      Остановить контейнер
@@ -33,6 +34,10 @@ $(basename "$0") — это легковесный инструмент для �
   help                   Показать эту справку и выйти
 EOF
     exit 1
+}
+
+images() {
+    find "${MACHINES_ROOT}" "${STORAGE_ROOT}" -mindepth 1 -maxdepth 1 -type d -exec basename {} \;
 }
 
 list() {
@@ -231,14 +236,14 @@ shift
 [ "$ACTION" = "help" ] && ACTION="usage"
 
 case "$ACTION" in
-    list|start|stop|restart|execute|show|destroy|status|log|usage) ;;
+    images|list|start|stop|restart|execute|show|destroy|status|log|usage) ;;
     *)
         echo "Ошибка: неизвестная команда '$ACTION'" >&2
         usage ;;
 esac
 
 # Проверка наличия имени контейнера для всех команд, кроме list
-if [ "$ACTION" != "list" ] && [ $# -lt 1 ]; then
+if [ "$ACTION" != "list" ] && [ "$ACTION" != "images" ] && [ $# -lt 1 ]; then
     usage
 fi
 
