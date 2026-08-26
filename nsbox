@@ -41,9 +41,10 @@ images() {
 }
 
 list() {
-    machinectl list 2>/dev/null || echo " (нет запущенных)"
+    machinectl --full list 2>/dev/null || echo " (нет запущенных)"
     echo ""
-    systemctl list-units "${SERVICE_TEMPLATE}*" --no-legend --all --no-pager
+    # Если не нужно выводить легенду, добавить --no-legend
+    systemctl list-units "${SERVICE_TEMPLATE}*" --all --no-pager
 }
 
 start() {
@@ -55,19 +56,28 @@ start() {
         return 0
     fi
 
+    NSPAWN_CONF="/etc/systemd/nspawn/${name}.nspawn"
+    echo "Создание файла конфигурации $NSPAWN_CONF"
+    mkdir -p /etc/systemd/nspawn
+    cp -n /etc/systemd/nspawn/config.tmpl "${NSPAWN_CONF}" 2>/dev/null || true
+
     # Перенаправление в systemd, если скрипт запущен вручную в терминале
     if [ -t 0 ]; then
-        echo "Запрос на запуск контейнера '$name' отправлен, смотри логи nsbox log $name"
+        # Чтение лимитов cgroupsv2 из конфига
+        PROPERTIES="$(grep -E '^X-(MemoryMax|CPUQuota|TasksMax)=' "${NSPAWN_CONF}" | sed 's/^X-//' | tr '\n' ' ')"
+        if [ -n "${PROPERTIES}" ]; then
+            echo "Применение лимитов ${PROPERTIES}"
+            # Завись лимитов во временный оверрайд юнита
+            sudo systemctl set-property "nsbox@${name}.service" $PROPERTIES
+        fi
+
+        echo "Запрос на запуск контейнера '$name' отправлен, смотри логи nsbox log $name"        
         # Флаг --no-block освобождает консоль
         systemctl start --no-block "nsbox@${name}.service"
         exit 0
     fi
 
     # Следуюшие команды выполняются только из ExecStart=/usr/local/bin/nsbox start %i
-    echo "Создание файла конфигурации /etc/systemd/nspawn/${name}.nspawn"
-    mkdir -p /etc/systemd/nspawn
-    cp -n /etc/systemd/nspawn/config.tmpl "/etc/systemd/nspawn/${name}.nspawn" 2>/dev/null || true
-
     echo "Запуск контейнера '${name}'..."
 
     # Если целевого каталога нет, подготовка каталога с оверлеем
@@ -99,6 +109,7 @@ start() {
     exec /usr/bin/systemd-nspawn \
         --quiet \
         --machine="${name}" \
+        --keep-unit \
         -D "${MACHINES_ROOT}/${name}"
 }
 
@@ -218,7 +229,9 @@ destroy() {
 
 status() {
     name="$1"
-    machinectl status $name
+    machinectl --no-pager status $name
+    echo "          Limits:"
+    systemctl show nsbox@"${name}".service -p MemoryMax -p TasksMax -p CPUQuotaPerSecUSec | sed "s/^/$(printf '%18s')/"
 }
 
 log() {
