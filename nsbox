@@ -21,16 +21,15 @@ usage() {
 $(basename "$0") — это легковесный инструмент для управления контейнерами systemd-nspawn 
 
 Команды:
-  images                 Вывести список образов
+  images                 Вывести список образов контейнеров
   list                   Вывести список запущенных контейнеров и юнитов
   start <container>      Запустить контейнер
   stop  <container>      Остановить контейнер
   restart <container>    Перезапустить контейнер
   exec <container> [cmd] Выполнить cmd в контейнере (по умолчанию /bin/sh)
-  show <container>       Показать статус контейнера и юнита
-  status <container>     Вывести статус контейнера
+  status <container>     Вывести статус контейнера и юнита
   log <container>        Вывести логи службы контейнера
-  destroy <container>    Уничтожить контейнер (удалить ${STORAGE_ROOT}/<container>)
+  destroy <container>    Уничтожить образ контейнера
   help                   Показать эту справку и выйти
 EOF
     exit 1
@@ -188,17 +187,6 @@ execute() {
         "$@"
 }
 
-show() {
-    name="$1"
-    systemctl status "${SERVICE_TEMPLATE}${name}.service" --no-pager -n 0 || true
-    echo ""
-    if machinectl show "$name" >/dev/null 2>&1; then
-        machinectl status "$name" --no-pager
-    else
-        echo "Контейнер '$name' не зарегистрирован или выключен"
-    fi
-}
-
 destroy() {
     name="$1"
     if machinectl show "$name" >/dev/null 2>&1; then
@@ -229,9 +217,16 @@ destroy() {
 
 status() {
     name="$1"
-    machinectl --no-pager status $name
-    echo "          Limits:"
-    systemctl show nsbox@"${name}".service -p MemoryMax -p TasksMax -p CPUQuotaPerSecUSec | sed "s/^/$(printf '%18s')/"
+    if machinectl show "$name" >/dev/null 2>&1; then
+        systemctl status "${SERVICE_TEMPLATE}${name}.service" --no-pager -n 0 || true
+        echo ""
+
+        machinectl --no-pager status $name
+        echo "          Limits:"
+        systemctl show nsbox@"${name}".service -p MemoryMax -p TasksMax -p CPUQuotaPerSecUSec | sed "s/^/$(printf '%18s')/"
+    else
+        echo "Контейнер '$name' не зарегистрирован или выключен"
+    fi
 }
 
 log() {
@@ -249,7 +244,7 @@ shift
 [ "$ACTION" = "help" ] && ACTION="usage"
 
 case "$ACTION" in
-    images|list|start|stop|restart|execute|show|destroy|status|log|usage) ;;
+    images|list|start|stop|restart|execute|destroy|status|log|usage) ;;
     *)
         echo "Ошибка: неизвестная команда '$ACTION'" >&2
         usage ;;
