@@ -2,12 +2,9 @@
 
 set -eu
 
-# Шаблон systemd-юнита
-SERVICE_TEMPLATE="nsbox@"
-# Хранилище с развернутыми образами оверлеев 
-STORAGE_ROOT=/var/lib/nsbox
-# Стандартный путь machinectl
-MACHINES_ROOT=/var/lib/machines
+SERVICE_TEMPLATE="nsbox@"        # Шаблон systemd-юнита
+STORAGE_ROOT=/var/lib/nsbox      # Хранилище с развернутыми образами оверлеев 
+MACHINES_ROOT=/var/lib/machines  # Стандартный путь machinectl
 
 # Перезапуск от root, если скрипт запущен от обычного пользователя
 if [ "$(id -u)" -ne 0 ]; then
@@ -40,7 +37,7 @@ images() {
 }
 
 list() {
-    machinectl --full list 2>/dev/null || echo " (нет запущенных)"
+    machinectl --full list 2>/dev/null
     echo ""
     # Если не нужно выводить легенду, добавить --no-legend
     systemctl list-units "${SERVICE_TEMPLATE}*" --all --no-pager
@@ -60,14 +57,14 @@ start() {
     mkdir -p /etc/systemd/nspawn
     cp -n /etc/systemd/nspawn/config.tmpl "${NSPAWN_CONF}" 2>/dev/null || true
 
-    # Перенаправление в systemd, если скрипт запущен вручную в терминале
+    # Проверка способа запуска (вручную из терминала или через systemd)
     if [ -t 0 ]; then
         # Чтение лимитов cgroupsv2 из конфига
-        PROPERTIES="$(grep -E '^X-(MemoryMax|CPUQuota|TasksMax)=' "${NSPAWN_CONF}" | sed 's/^X-//' | tr '\n' ' ')"
-        if [ -n "${PROPERTIES}" ]; then
-            echo "Применение лимитов ${PROPERTIES}"
+        properties="$(grep -E '^X-(MemoryMax|CPUQuota|TasksMax)=' "${NSPAWN_CONF}" | sed 's/^X-//' | tr '\n' ' ')"
+        if [ -n "${properties}" ]; then
+            echo "Применение лимитов ${properties}"
             # Завись лимитов во временный оверрайд юнита
-            sudo systemctl set-property "nsbox@${name}.service" $PROPERTIES
+            sudo systemctl set-property "nsbox@${name}.service" ${properties}
         fi
 
         echo "Запрос на запуск контейнера '$name' отправлен, смотри логи nsbox log $name"        
@@ -76,7 +73,7 @@ start() {
         exit 0
     fi
 
-    # Следуюшие команды выполняются только из ExecStart=/usr/local/bin/nsbox start %i
+    # Следуюшие команды выполняются только при вызове usr/local/bin/nsbox start %i в юните
     echo "Запуск контейнера '${name}'..."
 
     # Если целевого каталога нет, подготовка каталога с оверлеем
@@ -115,7 +112,7 @@ start() {
 stop() {
     name="$1"
 
-    # Перенаправление в systemd, если скрипт запущен вручную в терминале
+    # Проверка способа запуска (вручную из терминала или через systemd)
     if [ -t 0 ]; then
         # Проверка запущен ли контейнер
         if ! machinectl show "$name" >/dev/null 2>&1; then
@@ -132,7 +129,7 @@ stop() {
         exit 0 
     fi
 
-    # Следуюшие команды выполняются только из ExecStopPost=/usr/local/bin/nsbox stop %i
+    # Следуюшие команды выполняются только при вызове usr/local/bin/nsbox start %i в юните
     echo "Очистка ресурсов для контейнера '${name}'..."
 
     # Очистка оверлея если это симлинк
@@ -213,6 +210,8 @@ destroy() {
 
     # Удаление файла конфигурации, если существует
     rm -fv /etc/systemd/nspawn/${name}.nspawn
+
+    echo "Готово."
 }
 
 status() {
