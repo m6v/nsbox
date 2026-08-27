@@ -11,8 +11,8 @@ ExecStart=/usr/local/bin/nsbox start %i
 # Очистку доверяем systemd, вызывая тот же скрипт с параметром stop
 ExecStopPost=/usr/local/bin/nsbox stop %i
 
-# Считать код 1 успешным (специфика завершения sleep infinity при SIGTERM)
-SuccessExitStatus=1
+# Считать коды, связнанные со спецификой остановки контейнеров успешными
+SuccessExitStatus=1 219
 
 # Таймаут для завершения процессов в контейнере после отправки SIGTERM
 TimeoutStopSec=10s

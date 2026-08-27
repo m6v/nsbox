@@ -225,6 +225,7 @@ status() {
         systemctl show nsbox@"${name}".service -p MemoryMax -p TasksMax -p CPUQuotaPerSecUSec | sed "s/^/$(printf '%18s')/"
     else
         echo "Контейнер '$name' не зарегистрирован или выключен"
+        systemctl status "${SERVICE_TEMPLATE}${name}.service" --no-pager -n 0 || true
     fi
 }
 
