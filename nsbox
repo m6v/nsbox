@@ -102,10 +102,10 @@ start() {
     fi
 
     # Передача управления контейнеру (systemd контролирует systemd-nspawn)
+    # NB! Опцию --keep-unit не использовать, иначе не корректно не остановить контейнер
     exec /usr/bin/systemd-nspawn \
         --quiet \
         --machine="${name}" \
-        --keep-unit \
         -D "${MACHINES_ROOT}/${name}"
 }
 

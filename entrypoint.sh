@@ -4,9 +4,18 @@
 on_exit() {
     echo "Stopping background processes..."
     # Здесь выполнять необходимые действия для корректного завершения работы
+    # и/или отправка сигнала SIGTERM (15) для мягкого завершения всех фоновых процессов
+    kill $(jobs -p) 2>/dev/null
+    
+    # Ожидание завершения фоновых процессов (Graceful Shutdown) или таймаута
+    # (90 секунд по дефолту или значения, установленного в TimeoutStopSec)
+    wait
+    
     exit 0
 }
-trap "on_exit" EXIT SIGTERM SIGINT
+# Так как /bin/sh не понимает сигналы с префиксом SIG (SIGTERM, SIGINT)
+# используем POSIX-совместимые TERM INT
+trap "on_exit" EXIT TERM INT
 
 # Включение виртуального интерфейса с настройками в /etc/network/interfaces
 # ifup host0
