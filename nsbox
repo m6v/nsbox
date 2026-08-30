@@ -47,7 +47,7 @@ start() {
     name="$1"
 
     # Проверка запущен ли контейнер
-    if machinectl show "$name" >/dev/null 2>&1; then
+    if machinectl show "${name}" >/dev/null 2>&1; then
         echo "Контейнер '${name}' уже запущен."
         return 0
     fi
@@ -102,7 +102,7 @@ start() {
     fi
 
     # Передача управления контейнеру (systemd контролирует systemd-nspawn)
-    # NB! Опцию --keep-unit не использовать, иначе не корректно не остановить контейнер
+    # NB! Опцию --keep-unit не использовать, иначе корректно не остановить контейнер
     exec /usr/bin/systemd-nspawn \
         --quiet \
         --machine="${name}" \
