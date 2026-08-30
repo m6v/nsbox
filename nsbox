@@ -120,7 +120,7 @@ stop() {
             return 0
         fi
 
-        # Отправка сигнала SIGTERM лидеру процесса (для вызова в entrypoint.sh функции on_close)
+        # Отправка сигнала SIGTERM лидеру контейнера (для вызова в entrypoint.sh функции on_close)
         machinectl kill --kill-who=leader --signal=SIGTERM "${name}"
 
         echo "Запрос на останов контейнера '$name' отправлен, смотри логи nsbox log $name"
@@ -129,10 +129,10 @@ stop() {
         exit 0 
     fi
 
-    # Следуюшие команды выполняются только при вызове usr/local/bin/nsbox start %i в юните
+    # Следуюшие команды выполняются только при вызове usr/local/bin/nsbox start %i в юните 
     echo "Очистка ресурсов для контейнера '${name}'..."
 
-    # Очистка оверлея если это симлинк
+    # Очистка оверлея, если в MACHINES_ROOT каталог контейнера это симлинк на STORAGE_ROOT
     if [ -L "${MACHINES_ROOT}/${name}" ]; then
         LOWER="${STORAGE_ROOT}/${name}/lower"
         UPPER="${STORAGE_ROOT}/${name}/upper"
@@ -222,6 +222,7 @@ status() {
 
         machinectl --no-pager status $name
         echo "          Limits:"
+        # Показать лимиты, выровненные по горизонтали как вывод machinectl
         systemctl show nsbox@"${name}".service -p MemoryMax -p TasksMax -p CPUQuotaPerSecUSec | sed "s/^/$(printf '%18s')/"
     else
         echo "Контейнер '$name' не зарегистрирован или выключен"
