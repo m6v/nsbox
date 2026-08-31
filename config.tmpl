@@ -1,14 +1,15 @@
 [Network]
 # Тип сети "Изолированная сеть"
-Private=yes
+# Private=yes
 # Тип сети "Виртуальный Ethernet-канал"
-# VirtualEthernet=yes
+VirtualEthernet=yes
 # Тип сети "Подключение к сетевому мосту"
 # Bridge=br0
 
 # Проброс портов
 # Port=tcp:8080:80
 # Port=tcp:4443:443
+
 
 [Files]
 # Проброс сокета X11
@@ -17,9 +18,12 @@ Bind=/tmp/.X11-unix
 # Проброс конфига DNS
 BindReadOnly=/etc/resolv.conf
 
+# Прячем настройки сети хоста в чистую оперативку (tmpfs)
+TemporaryFileSystem=/etc/systemd/network
+
 [Exec]
 # Вариант загрузки
-Boot=no
+Boot=yes
 
 # Кастомные параметры, которые парсятся скриптом запуска
 X-MemoryMax=2G
