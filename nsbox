@@ -101,6 +101,10 @@ start() {
         ln -s "$MERGED" "${MACHINES_ROOT}/${name}"
     fi
 
+    # Создание каталога etc в верхнем слое записи и пустого файла machine-id
+    mkdir -p "${STORAGE_ROOT}/${name}/upper/etc"
+    cp /dev/null "${STORAGE_ROOT}/${name}/upper/etc/machine-id"
+
     # Передача управления контейнеру (systemd контролирует systemd-nspawn)
     # NB! Опцию --keep-unit не использовать, иначе корректно не остановить контейнер
     exec /usr/bin/systemd-nspawn \
