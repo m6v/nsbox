@@ -1,0 +1,11 @@
+[Unit]
+Description=Container Entrypoint Script
+After=basic.target
+
+[Service]
+Type=oneshot
+ExecStart=/entrypoint.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=basic.target

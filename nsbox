@@ -101,16 +101,27 @@ start() {
         ln -s "$MERGED" "${MACHINES_ROOT}/${name}"
     fi
 
-    # Создание каталога etc в верхнем слое записи и пустого файла machine-id
-    mkdir -p "${STORAGE_ROOT}/${name}/upper/etc"
+    # Создание необходимых каталогов в upperdir
+    mkdir -p "${STORAGE_ROOT}/${name}/upper/etc/systemd/system"
+    # Изоляция machine-id и отключение монтирование дисков хоста (fstab)
     cp /dev/null "${STORAGE_ROOT}/${name}/upper/etc/machine-id"
+    cp /dev/null "${STORAGE_ROOT}/${name}/upper/etc/fstab"
+    
+    # Установка basic.target дефолтным юнитом контейнера по умолчанию
+    ln -sf /usr/lib/systemd/system/basic.target \
+    "${STORAGE_ROOT}/${name}/upper/etc/systemd/system/default.target"
+    
+    # Отключение попытки перемонтирования корня контейнером
+    ln -sf /dev/null "${STORAGE_ROOT}/${name}/upper/etc/systemd/system/systemd-remount-fs.service" || true
 
     # Передача управления контейнеру (systemd контролирует systemd-nspawn)
     # NB! Опцию --keep-unit не использовать, иначе корректно не остановить контейнер
     exec /usr/bin/systemd-nspawn \
         --quiet \
         --machine="${name}" \
+        --uuid="$(cat /proc/sys/kernel/random/uuid)" \
         -D "${MACHINES_ROOT}/${name}"
+
 }
 
 stop() {
