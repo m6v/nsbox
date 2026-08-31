@@ -44,15 +44,13 @@ list() {
 }
 
 start() {
-    name="$1"
-
     # Проверка запущен ли контейнер
-    if machinectl show "${name}" >/dev/null 2>&1; then
-        echo "Контейнер '${name}' уже запущен."
+    if machinectl show "${container_name}" >/dev/null 2>&1; then
+        echo "Контейнер '${container_name}' уже запущен."
         return 0
     fi
 
-    NSPAWN_CONF="/etc/systemd/nspawn/${name}.nspawn"
+    NSPAWN_CONF="/etc/systemd/nspawn/${container_name}.nspawn"
     echo "Создание файла конфигурации $NSPAWN_CONF"
     mkdir -p /etc/systemd/nspawn
     cp -n /etc/systemd/nspawn/config.tmpl "${NSPAWN_CONF}" 2>/dev/null || true
@@ -64,24 +62,24 @@ start() {
         if [ -n "${properties}" ]; then
             echo "Применение лимитов ${properties}"
             # Завись лимитов во временный оверрайд юнита
-            sudo systemctl set-property "nsbox@${name}.service" ${properties}
+            sudo systemctl set-property "nsbox@${container_name}.service" ${properties}
         fi
 
-        echo "Запрос на запуск контейнера '$name' отправлен, смотри логи nsbox log $name"        
+        echo "Запрос на запуск контейнера '${container_name}' отправлен, смотри логи nsbox log ${container_name}"        
         # Флаг --no-block освобождает консоль
-        systemctl start --no-block "nsbox@${name}.service"
+        systemctl start --no-block "nsbox@${container_name}.service"
         exit 0
     fi
 
     # Следуюшие команды выполняются только при вызове usr/local/bin/nsbox start %i в юните
-    echo "Запуск контейнера '${name}'..."
+    echo "Запуск контейнера '${container_name}'..."
 
     # Если целевого каталога нет, подготовка каталога с оверлеем
-    if [ ! -d "${MACHINES_ROOT}/${name}" ]; then
-        LOWER="${STORAGE_ROOT}/${name}/lower"
-        UPPER="${STORAGE_ROOT}/${name}/upper"
-        WORK="${STORAGE_ROOT}/${name}/work"
-        MERGED="${STORAGE_ROOT}/${name}/merged"
+    if [ ! -d "${MACHINES_ROOT}/${container_name}" ]; then
+        LOWER="${STORAGE_ROOT}/${container_name}/lower"
+        UPPER="${STORAGE_ROOT}/${container_name}/upper"
+        WORK="${STORAGE_ROOT}/${container_name}/work"
+        MERGED="${STORAGE_ROOT}/${container_name}/merged"
 
         # Размонтирование и очистка на случай старта после нештатной остановки
         umount -l "$MERGED" 2>/dev/null || true
@@ -98,89 +96,84 @@ start() {
 
         # Монтирование оверлея
         mount -t overlay overlay -o "lowerdir=${LOWER},upperdir=${UPPER},workdir=${WORK}" "$MERGED"
-        ln -s "$MERGED" "${MACHINES_ROOT}/${name}"
+        ln -s "$MERGED" "${MACHINES_ROOT}/${container_name}"
     fi
 
     # Создание необходимых каталогов в upperdir
-    mkdir -p "${STORAGE_ROOT}/${name}/upper/etc/systemd/system"
+    mkdir -p "${STORAGE_ROOT}/${container_name}/upper/etc/systemd/system"
     # Изоляция machine-id и отключение монтирование дисков хоста (fstab)
-    cp /dev/null "${STORAGE_ROOT}/${name}/upper/etc/machine-id"
-    cp /dev/null "${STORAGE_ROOT}/${name}/upper/etc/fstab"
+    cp /dev/null "${STORAGE_ROOT}/${container_name}/upper/etc/machine-id"
+    cp /dev/null "${STORAGE_ROOT}/${container_name}/upper/etc/fstab"
     
     # Установка basic.target дефолтным юнитом контейнера по умолчанию
     ln -sf /usr/lib/systemd/system/basic.target \
-    "${STORAGE_ROOT}/${name}/upper/etc/systemd/system/default.target"
+    "${STORAGE_ROOT}/${container_name}/upper/etc/systemd/system/default.target"
     
     # Отключение попытки перемонтирования корня контейнером
-    ln -sf /dev/null "${STORAGE_ROOT}/${name}/upper/etc/systemd/system/systemd-remount-fs.service" || true
+    ln -sf /dev/null "${STORAGE_ROOT}/${container_name}/upper/etc/systemd/system/systemd-remount-fs.service" || true
 
     # Передача управления контейнеру (systemd контролирует systemd-nspawn)
     # NB! Опцию --keep-unit не использовать, иначе корректно не остановить контейнер
     exec /usr/bin/systemd-nspawn \
         --quiet \
-        --machine="${name}" \
+        --machine="${container_name}" \
         --uuid="$(cat /proc/sys/kernel/random/uuid)" \
-        -D "${MACHINES_ROOT}/${name}"
-
+        -D "${MACHINES_ROOT}/${container_name}"
 }
 
 stop() {
-    name="$1"
-
     # Проверка способа запуска (вручную из терминала или через systemd)
     if [ -t 0 ]; then
         # Проверка запущен ли контейнер
-        if ! machinectl show "$name" >/dev/null 2>&1; then
-            echo "Контейнер '${name}' не запущен."
+        if ! machinectl show "${container_name}" >/dev/null 2>&1; then
+            echo "Контейнер '${container_name}' не запущен."
             return 0
         fi
 
         # Отправка сигнала SIGTERM лидеру контейнера (для вызова в entrypoint.sh функции on_close)
-        machinectl kill --kill-who=leader --signal=SIGTERM "${name}"
+        machinectl kill --kill-who=leader --signal=SIGTERM "${container_name}"
 
-        echo "Запрос на останов контейнера '$name' отправлен, смотри логи nsbox log $name"
+        echo "Запрос на останов контейнера '${container_name}' отправлен, смотри логи nsbox log ${container_name}"
         # Флаг --no-block возвращает управление в терминал
-        systemctl stop --no-block "nsbox@${name}.service"
+        systemctl stop --no-block "nsbox@${container_name}.service"
         exit 0 
     fi
 
     # Следуюшие команды выполняются только при вызове usr/local/bin/nsbox start %i в юните 
-    echo "Очистка ресурсов для контейнера '${name}'..."
+    echo "Очистка ресурсов для контейнера '${container_name}'..."
 
     # Очистка оверлея, если в MACHINES_ROOT каталог контейнера это симлинк на STORAGE_ROOT
-    if [ -L "${MACHINES_ROOT}/${name}" ]; then
-        LOWER="${STORAGE_ROOT}/${name}/lower"
-        UPPER="${STORAGE_ROOT}/${name}/upper"
-        WORK="${STORAGE_ROOT}/${name}/work"
-        MERGED="${STORAGE_ROOT}/${name}/merged"
+    if [ -L "${MACHINES_ROOT}/${container_name}" ]; then
+        LOWER="${STORAGE_ROOT}/${container_name}/lower"
+        UPPER="${STORAGE_ROOT}/${container_name}/upper"
+        WORK="${STORAGE_ROOT}/${container_name}/work"
+        MERGED="${STORAGE_ROOT}/${container_name}/merged"
 
         # Размонтирование и очистка рабочих директорий
         umount -l "$MERGED" 2>/dev/null || true
         umount -l "$LOWER" 2>/dev/null || true
         find "$WORK" -mindepth 1 -delete 2>/dev/null || true
 
-        rm "${MACHINES_ROOT}/${name}"
+        rm "${MACHINES_ROOT}/${container_name}"
     fi
 
     echo "Готово."
 }
 
 restart() {
-    name="$1"
-    echo "Перезапуск контейнера '${name}'..."
-    systemctl restart "${SERVICE_TEMPLATE}${name}.service"
+    echo "Перезапуск контейнера '${container_name}'..."
+    systemctl restart "${SERVICE_TEMPLATE}${container_name}.service"
     echo "Готово."
 }
 
 execute() {
-    name="$1"
     shift
 
     # Получение PID главного процесса контейнера через machinectl
-    pid=$(machinectl show "$name" -p Leader --value 2>/dev/null || true)
+    pid=$(machinectl show "$container_name" -p Leader --value 2>/dev/null || true)
 
     if [ -z "$pid" ] || [ "$pid" -eq 0 ]; then
-        echo "Ошибка: Контейнер '$name' не запущен или не найден PID главного процесса." >&2
+        echo "Ошибка: Контейнер '${container_name}' не запущен или не найден PID главного процесса." >&2
         exit 1
     fi
 
@@ -200,54 +193,51 @@ execute() {
 }
 
 destroy() {
-    name="$1"
-    if machinectl show "$name" >/dev/null 2>&1; then
-        echo "Ошибка: Контейнер '$name' запущен, остановите перед удалением." >&2
+    if machinectl show "${container_name}" >/dev/null 2>&1; then
+        echo "Ошибка: Контейнер '${container_name}' запущен, остановите перед удалением." >&2
         exit 1
     fi
 
-    printf "Удалить контейнер '$name'? [y/N] "
+    printf "Удалить контейнер '${container_name}'? [y/N] "
     read -r response
     if [ "$response" != "y" ] && [ "$response" != "Y" ]; then
         exit 0
     fi
 
-    # Чтобы обезопасить удаление преобразуем name через systemd-escape, 
+    # Чтобы обезопасить удаление преобразуем container_name через systemd-escape, 
     # если содержит спецсимволы, слэши или точки, вернет код ошибки
-    systemd-escape --mangle "$name" >/dev/null 2>&1
+    systemd-escape --mangle "${container_name}" >/dev/null 2>&1
     if [ $? -ne 0 ]; then
         exit 1
     fi
 
     # Удаление каталогов контейнера, если существуют
-    rm -rfv "${MACHINES_ROOT}/${name}"
-    rm -rfv "${STORAGE_ROOT}/${name}"
+    rm -rfv "${MACHINES_ROOT}/${container_name}"
+    rm -rfv "${STORAGE_ROOT}/${container_name}"
 
     # Удаление файла конфигурации, если существует
-    rm -fv /etc/systemd/nspawn/${name}.nspawn
+    rm -fv /etc/systemd/nspawn/${container_name}.nspawn
 
     echo "Готово."
 }
 
 status() {
-    name="$1"
-    if machinectl show "$name" >/dev/null 2>&1; then
-        systemctl status "${SERVICE_TEMPLATE}${name}.service" --no-pager -n 0 || true
+    if machinectl show "${container_name}" >/dev/null 2>&1; then
+        systemctl status "${SERVICE_TEMPLATE}${container_name}.service" --no-pager -n 0 || true
         echo ""
 
-        machinectl --no-pager status $name
+        machinectl --no-pager status ${container_name}
         echo "          Limits:"
         # Показать лимиты, выровненные по горизонтали как вывод machinectl
-        systemctl show nsbox@"${name}".service -p MemoryMax -p TasksMax -p CPUQuotaPerSecUSec | sed "s/^/$(printf '%18s')/"
+        systemctl show nsbox@"${container_name}".service -p MemoryMax -p TasksMax -p CPUQuotaPerSecUSec | sed "s/^/$(printf '%18s')/"
     else
-        echo "Контейнер '$name' не зарегистрирован или выключен"
-        systemctl status "${SERVICE_TEMPLATE}${name}.service" --no-pager -n 0 || true
+        echo "Контейнер '${container_name}' не зарегистрирован или выключен"
+        systemctl status "${SERVICE_TEMPLATE}${container_name}.service" --no-pager -n 0 || true
     fi
 }
 
 log() {
-    name="$1"
-    journalctl -u nsbox@$name --no-pager
+    journalctl -u nsbox@${container_name} --no-pager
 }
 
 # Проверка минимального количества аргументов
@@ -260,15 +250,18 @@ shift
 [ "$ACTION" = "help" ] && ACTION="usage"
 
 case "$ACTION" in
-    images|list|start|stop|restart|execute|destroy|status|log|usage) ;;
+    images|list|start|restart|stop|execute|destroy|status|log|usage) ;;
     *)
         echo "Ошибка: неизвестная команда '$ACTION'" >&2
         usage ;;
 esac
 
-# Проверка наличия имени контейнера для всех команд, кроме list
+# Проверка наличия имени контейнера для всех команд, кроме list и images
 if [ "$ACTION" != "list" ] && [ "$ACTION" != "images" ] && [ $# -lt 1 ]; then
     usage
 fi
+
+# Чтение имени контейнера (если указано)
+container_name="${1:-}"
 
 "$ACTION" "$@"
