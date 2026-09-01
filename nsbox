@@ -46,20 +46,46 @@ list() {
 }
 
 load() {
+    image_ref=$1
     # Разбиение имени образа по двоеточию на имя и тег (если указан)
-    IFS=':' read -r image tag <<< "$container_name"
-    tag="${tag:-latest}"
+    image="${image_ref%%:*}"
+    tag="${image_ref#*:}"
+    [ "$image" = "$tag" ] && tag="latest"
+    container_name=$(echo "$image" | tr '/' '_')
 
-    temp_dir="/var/tmp/${image}_${tag}"
-    root_dir="${MACHINES_ROOT}/${image}"
+    temp_dir=$(mktemp -d /var/tmp/nspawn.XXXXXX)
+    root_dir="${MACHINES_ROOT}/${container_name}"
 
     if [ -d "$root_dir" ]; then
         read -p "Каталог $root_dir существует, распаковать поверх? [y/N]: " response
         [[ "$response" != [yY] ]] && exit 0
     fi
 
-    skopeo --insecure-policy copy docker://"${image}:${tag}" oci:"${temp_dir}:${tag}" &&
-    umoci raw unpack --image "${temp_dir}:${tag}" "${root_dir}" && rm -rf "${temp_dir}"
+    # Скачивание docker-образа и распаковка в корень контейнера
+    skopeo --insecure-policy copy docker://"${image}:${tag}" oci:"${temp_dir}:${tag}"
+    config_json=$(skopeo inspect --config "oci:${temp_dir}:${tag}")
+    umoci raw unpack --image "${temp_dir}:${tag}" "${root_dir}"
+    rm -rf "${temp_dir}"
+
+    # Извлечение команды, рабочей директории и пользователя из конфига образа 
+    cmd=$(echo "$config_json" | jq -r '((.config.Entrypoint // []) + (.config.Cmd // [])) | join(" ")')
+    cmd="${cmd:-/bin/sh}"
+    workdir=$(echo "$config_json" | jq -r '.config.WorkingDir // "/"')
+    user=$(echo "$config_json" | jq -r '.config.User // ""')
+
+    # Формирование строки Environment=KEY=VAL
+    env_lines=$(echo "$config_json" | jq -r '
+      .config.Env // [] | map("Environment=" + .) | join("\n")
+    ')
+
+    # Запись параметров в конец конфига .nspawn
+    nspawn_file="/etc/systemd/nspawn/${container_name}.nspawn"
+    mkdir -p /etc/systemd/nspawn
+    cp -n /etc/systemd/nspawn/config.tmpl "${nspawn_file}" 2>/dev/null || true
+    echo "# Auto-generated parameters from OCI Image Config" >> "${nspawn_file}"
+    echo "Parameters=$cmd" >> "${nspawn_file}"
+    echo "WorkingDirectory=$workdir" >> "${nspawn_file}"
+    echo "$env_lines" >> "${nspawn_file}"
 }
 
 start() {
@@ -69,22 +95,22 @@ start() {
         return 0
     fi
 
-    NSPAWN_CONF="/etc/systemd/nspawn/${container_name}.nspawn"
-    echo "Создание файла конфигурации $NSPAWN_CONF"
+    nspawn_file="/etc/systemd/nspawn/${container_name}.nspawn"
+    echo "Создание файла конфигурации $nspawn_file"
     mkdir -p /etc/systemd/nspawn
-    cp -n /etc/systemd/nspawn/config.tmpl "${NSPAWN_CONF}" 2>/dev/null || true
+    cp -n /etc/systemd/nspawn/config.tmpl "${nspawn_file}" 2>/dev/null || true
 
     # Проверка способа запуска (вручную из терминала или через systemd)
     if [ -t 0 ]; then
         # Чтение лимитов cgroupsv2 из конфига
-        properties="$(grep -E '^X-(MemoryMax|CPUQuota|TasksMax)=' "${NSPAWN_CONF}" | sed 's/^X-//' | tr '\n' ' ')"
+        properties="$(grep -E '^X-(MemoryMax|CPUQuota|TasksMax)=' "${nspawn_file}" | sed 's/^X-//' | tr '\n' ' ')"
         if [ -n "${properties}" ]; then
             echo "Применение лимитов ${properties}"
             # Завись лимитов во временный оверрайд юнита
             sudo systemctl set-property "nsbox@${container_name}.service" ${properties}
         fi
 
-        echo "Запрос на запуск контейнера '${container_name}' отправлен, смотри логи nsbox log ${container_name}"        
+        echo "Запрос на запуск контейнера '${container_name}' отправлен, смотри логи nsbox log ${container_name}"
         # Флаг --no-block освобождает консоль
         systemctl start --no-block "nsbox@${container_name}.service"
         exit 0

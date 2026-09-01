@@ -22,7 +22,7 @@ BindReadOnly=/etc/resolv.conf
 TemporaryFileSystem=/etc/systemd/network
 
 [Exec]
-# Вариант загрузки
+# Вариант загрузки (yes|no)
 Boot=no
 
 # Кастомные параметры, которые парсятся скриптом запуска
@@ -30,8 +30,8 @@ X-MemoryMax=2G
 X-CPUQuota=25%
 X-TasksMax=100
 
-# Программа, запускаемая при старте контейнера (по умолчанию /bin/bash)
-# NB! Во многих дистрибутивах запуск bash в качестве лидера не работает,
-# так как без подключения к псевдотерминалу завершает работу
-Parameters=/bin/sleep infinity
-# Parameters=/entrypoint.sh
+# Запуск sh или bash в качестве лидера контейнера может не работать,
+# так как без подключения к псевдотерминалу оболочка завершает работу
+# Используйте шаблон entrypoint.sh, скопировав его в контейнер, или
+# Parameters=/bin/sh -c "trap : TERM INT; /bin/sleep infinity & wait $!"
+
