@@ -18,12 +18,13 @@ Bind=/tmp/.X11-unix
 # Проброс конфига DNS
 BindReadOnly=/etc/resolv.conf
 
-# Прячем настройки сети хоста в чистую оперативку (tmpfs)
+# Монтирование настроек сети контейнера в оперативную память (tmpfs),
+# чтобы замаскировать настройки сети хоста
 TemporaryFileSystem=/etc/systemd/network
 
 [Exec]
 # Вариант загрузки
-Boot=yes
+Boot=no
 
 # Кастомные параметры, которые парсятся скриптом запуска
 X-MemoryMax=2G

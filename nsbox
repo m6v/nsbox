@@ -73,7 +73,6 @@ start() {
     fi
 
     # Следуюшие команды выполняются только при вызове usr/local/bin/nsbox start %i в юните
-    echo "Запуск контейнера '${container_name}'..."
 
     # Если целевого каталога нет, подготовка каталога с оверлеем
     if [ ! -d "${MACHINES_ROOT}/${container_name}" ]; then
@@ -85,13 +84,13 @@ start() {
         # Размонтирование и очистка на случай старта после нештатной остановки
         umount -l "$MERGED" 2>/dev/null || true
         umount -l "$LOWER" 2>/dev/null || true
-        find "$WORK" -mindepth 1 -delete || true
+        find "$WORK" -mindepth 1 -delete 2>/dev/null || true
         mkdir -p "$LOWER" "$UPPER" "$WORK" "$MERGED"
         
         # Копирование шаблона дефолтной точки входа
         cp -n "${STORAGE_ROOT}/entrypoint.sh" "$UPPER"
 
-        echo "Монтирование корня хоста в $LOWER..."
+        echo "Монтирование корня хоста в $LOWER"
         mount --bind -o ro / "$LOWER"
         mount --make-private "$LOWER"
 
@@ -113,6 +112,7 @@ start() {
     # Отключение попытки перемонтирования корня контейнером
     ln -sf /dev/null "${STORAGE_ROOT}/${container_name}/upper/etc/systemd/system/systemd-remount-fs.service" || true
 
+    echo "Запуск контейнера '${container_name}'..."
     # Передача управления контейнеру (systemd контролирует systemd-nspawn)
     # NB! Опцию --keep-unit не использовать, иначе корректно не остановить контейнер
     exec /usr/bin/systemd-nspawn \
@@ -140,8 +140,8 @@ stop() {
         exit 0 
     fi
 
-    # Следуюшие команды выполняются только при вызове usr/local/bin/nsbox start %i в юните 
-    echo "Очистка ресурсов для контейнера '${container_name}'..."
+    # Следуюшие команды выполняются только при вызове usr/local/bin/nsbox stop %i в юните 
+    echo "Очистка ресурсов контейнера '${container_name}'..."
 
     # Очистка оверлея, если в MACHINES_ROOT каталог контейнера это симлинк на STORAGE_ROOT
     if [ -L "${MACHINES_ROOT}/${container_name}" ]; then
