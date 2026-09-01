@@ -26,6 +26,7 @@ $(basename "$0") — это легковесный инструмент для �
   exec <container> [cmd] Выполнить cmd в контейнере (по умолчанию /bin/sh)
   status <container>     Вывести статус контейнера и юнита
   log <container>        Вывести логи службы контейнера
+  config <container>     Открыть файл конфигурации контейнера
   destroy <container>    Уничтожить образ контейнера
   help                   Показать эту справку и выйти
 EOF
@@ -240,6 +241,10 @@ log() {
     journalctl -u nsbox@${container_name} --no-pager
 }
 
+config() {
+    ${EDITOR:-nano} /etc/systemd/nspawn/${container_name}.nspawn
+}
+
 # Проверка минимального количества аргументов
 [ $# -lt 1 ] && usage
 
@@ -250,7 +255,7 @@ shift
 [ "$ACTION" = "help" ] && ACTION="usage"
 
 case "$ACTION" in
-    images|list|start|restart|stop|execute|destroy|status|log|usage) ;;
+    images|list|start|restart|stop|execute|destroy|status|log|config|usage) ;;
     *)
         echo "Ошибка: неизвестная команда '$ACTION'" >&2
         usage ;;
