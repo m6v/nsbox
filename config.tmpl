@@ -2,14 +2,13 @@
 # Тип сети "Изолированная сеть"
 # Private=yes
 # Тип сети "Виртуальный Ethernet-канал"
-VirtualEthernet=yes
+# VirtualEthernet=yes
 # Тип сети "Подключение к сетевому мосту"
 # Bridge=br0
 
 # Проброс портов
 # Port=tcp:8080:80
 # Port=tcp:4443:443
-
 
 [Files]
 # Проброс сокета X11
@@ -19,7 +18,7 @@ Bind=/tmp/.X11-unix
 BindReadOnly=/etc/resolv.conf
 
 # Монтирование настроек сети контейнера в оперативную память (tmpfs),
-# чтобы замаскировать настройки сети хоста
+# для маскировки настроек сети хоста
 TemporaryFileSystem=/etc/systemd/network
 
 [Exec]
@@ -34,5 +33,5 @@ X-TasksMax=100
 # Программа, запускаемая при старте контейнера (по умолчанию /bin/bash)
 # NB! Во многих дистрибутивах запуск bash в качестве лидера не работает,
 # так как без подключения к псевдотерминалу завершает работу
-# Parameters=/bin/sleep infinity
-Parameters=/entrypoint.sh
+Parameters=/bin/sleep infinity
+# Parameters=/entrypoint.sh

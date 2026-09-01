@@ -20,6 +20,7 @@ $(basename "$0") — это легковесный инструмент для �
 Команды:
   images                 Вывести список образов контейнеров
   list                   Вывести список запущенных контейнеров и юнитов
+  load  <image[:tag]>    Загрузить образ контейнера с dockerhub
   start <container>      Запустить контейнер
   stop  <container>      Остановить контейнер
   restart <container>    Перезапустить контейнер
@@ -28,7 +29,7 @@ $(basename "$0") — это легковесный инструмент для �
   log <container>        Вывести логи службы контейнера
   config <container>     Открыть файл конфигурации контейнера
   destroy <container>    Уничтожить образ контейнера
-  help                   Показать эту справку и выйти
+  --help                 Показать эту справку и выйти
 EOF
     exit 1
 }
@@ -42,6 +43,23 @@ list() {
     echo ""
     # Если не нужно выводить легенду, добавить --no-legend
     systemctl list-units "${SERVICE_TEMPLATE}*" --all --no-pager
+}
+
+load() {
+    # Разбиение имени образа по двоеточию на имя и тег (если указан)
+    IFS=':' read -r image tag <<< "$container_name"
+    tag="${tag:-latest}"
+
+    temp_dir="/var/tmp/${image}_${tag}"
+    root_dir="${MACHINES_ROOT}/${image}"
+
+    if [ -d "$root_dir" ]; then
+        read -p "Каталог $root_dir существует, распаковать поверх? [y/N]: " response
+        [[ "$response" != [yY] ]] && exit 0
+    fi
+
+    skopeo --insecure-policy copy docker://"${image}:${tag}" oci:"${temp_dir}:${tag}" &&
+    umoci raw unpack --image "${temp_dir}:${tag}" "${root_dir}" && rm -rf "${temp_dir}"
 }
 
 start() {
@@ -252,10 +270,10 @@ ACTION="$1"
 shift
 # Синонимы команд
 [ "$ACTION" = "exec" ] && ACTION="execute"
-[ "$ACTION" = "help" ] && ACTION="usage"
+[ "$ACTION" = "--help" ] && ACTION="usage"
 
 case "$ACTION" in
-    images|list|start|restart|stop|execute|destroy|status|log|config|usage) ;;
+    images|load|list|start|restart|stop|execute|destroy|status|log|config|usage) ;;
     *)
         echo "Ошибка: неизвестная команда '$ACTION'" >&2
         usage ;;
