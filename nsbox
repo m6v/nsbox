@@ -20,7 +20,8 @@ $(basename "$0") — это легковесный инструмент для �
 Команды:
   images                 Вывести список образов контейнеров
   list                   Вывести список запущенных контейнеров и юнитов
-  load  <image[:tag]>    Загрузить образ контейнера с dockerhub
+  load  <image[:tag]>    Загрузить образ с dockerhub или из <image>, если это архив
+  save  <container>      Сохранить образ в <container>.tar.gz
   start <container>      Запустить контейнер
   stop  <container>      Остановить контейнер
   restart <container>    Перезапустить контейнер
@@ -101,6 +102,18 @@ load() {
     echo "Parameters=$cmd" >> "$nspawn_file"
     echo "WorkingDirectory=$workdir" >> "$nspawn_file"
     echo "$env_lines" >> "$nspawn_file"
+}
+
+save() {
+    if machinectl show "${container_name}" >/dev/null 2>&1; then
+        echo "Ошибка: Контейнер '${container_name}' запущен, остановите перед сохранением." >&2
+        exit 1
+    fi
+
+    if [ -d "${MACHINES_ROOT}/${container_name}" ]; then
+        tar -czf "${container_name}.tar.gz" -C "${MACHINES_ROOT}/${container_name}" .
+        exit 0
+    fi
 }
 
 start() {
@@ -314,7 +327,7 @@ shift
 [ "$ACTION" = "--help" ] && ACTION="usage"
 
 case "$ACTION" in
-    images|load|list|start|restart|stop|execute|destroy|status|log|config|usage) ;;
+    images|load|save|list|start|restart|stop|execute|destroy|status|log|config|usage) ;;
     *)
         echo "Ошибка: неизвестная команда '$ACTION'" >&2
         usage ;;
