@@ -59,7 +59,13 @@ load() {
         container_name=$(echo "${image_file%%.tar*}" | sed 's/[^a-zA-Z0-9.-]/-/g')
         container_name="${container_name:0:64}"
         nspawn_file="/etc/systemd/nspawn/${container_name}.nspawn"
-        root_dir="${MACHINES_ROOT}/${container_name}"
+
+        # Определение корня контейнера по наличию каталога upper в архиве
+        if tar -tf "$image" | grep -Eq '^(\./)?upper/$'; then
+            root_dir="${STORAGE_ROOT}/${container_name}"
+        else
+            root_dir="${MACHINES_ROOT}/${container_name}"
+        fi
 
         mkdir -p "$root_dir"
         tar -xf "$image" -C "$root_dir" || { rmdir "$root_dir"; exit 1; }
@@ -112,6 +118,11 @@ save() {
 
     if [ -d "${MACHINES_ROOT}/${container_name}" ]; then
         tar -czf "${container_name}.tar.gz" -C "${MACHINES_ROOT}/${container_name}" .
+        exit 0
+    fi
+
+    if [ -d "${STORAGE_ROOT}/${container_name}" ]; then
+        tar -czf "${container_name}.tar.gz" -C "${STORAGE_ROOT}/${container_name}" .
         exit 0
     fi
 }
