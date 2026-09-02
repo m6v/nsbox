@@ -69,8 +69,16 @@ load() {
 
         mkdir -p "$root_dir"
         tar -xf "$image" -C "$root_dir" || { rmdir "$root_dir"; exit 1; }
+
+        # Восстановление или создание нового конфига контейнера
         mkdir -p /etc/systemd/nspawn
-        cp -n /etc/systemd/nspawn/config.tmpl "$nspawn_file" 2>/dev/null || true
+        if [ -f "${root_dir}/${container_name}.nspawn" ]; then
+            cp -i "${root_dir}/${container_name}.nspawn" /etc/systemd/nspawn
+            rm "${root_dir}/${container_name}.nspawn"
+        else
+            cp -n /etc/systemd/nspawn/config.tmpl "$nspawn_file" 2>/dev/null || true
+        fi
+
         exit 0
     fi
 
@@ -116,14 +124,16 @@ save() {
         exit 1
     fi
 
-    if [ -d "${MACHINES_ROOT}/${container_name}" ]; then
-        tar -czf "${container_name}.tar.gz" -C "${MACHINES_ROOT}/${container_name}" .
-        exit 0
-    fi
-
     if [ -d "${STORAGE_ROOT}/${container_name}" ]; then
-        tar -czf "${container_name}.tar.gz" -C "${STORAGE_ROOT}/${container_name}" .
-        exit 0
+        root_dir="${STORAGE_ROOT}/${container_name}"
+    elif [ -d "${MACHINES_ROOT}/${container_name}" ]; then
+        root_dir="${MACHINES_ROOT}/${container_name}"
+    fi
+    
+    if [ -n "$root_dir" ]; then
+        cp "/etc/systemd/nspawn/${container_name}.nspawn" "$root_dir" || true
+        tar -czf "${container_name}.tar.gz" -C "$root_dir" .
+        rm "$root_dir/${container_name}.nspawn" || true
     fi
 }
 
