@@ -21,6 +21,9 @@ BindReadOnly=/etc/resolv.conf
 # для маскировки настроек сети хоста
 TemporaryFileSystem=/etc/systemd/network
 
+# Разрешение работы подсистемы FUSE в пространстве пользователя
+Bind=/dev/fuse
+
 [Exec]
 # Вариант загрузки (yes|no)
 Boot=no
