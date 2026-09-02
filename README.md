@@ -246,3 +246,66 @@ skopeo --insecure-policy copy docker://alpine:latest oci-archive:/tmp/alpine.tar
 # Флаг --rootless, если не хотим назначать на распаковываемые файлы права root'а
 umoci raw unpack --rootless --image /tmp/alpine-oci:latest /var/lib/machines/alpine-root
 ```
+
+### Использование контейнера Astra Linux SE
+```
+mount /astra-1.7_x86-64.iso /srv/repo/alse/main
+mkdir -p /var/lib/machines/astra
+debootstrap --no-check-gpg --components=main,contrib,non-free 1.7_x86-64 /var/lib/machines/astra file:/srv/repo/alse/main
+```
+Со стандартным шаблоном настроек на хосте с Астрой запускается без ошибок как с заглушкой, так и с systemd.
+```
+# ps ax
+    PID TTY      STAT   TIME COMMAND
+      1 ?        Ss     0:00 /usr/lib/systemd/systemd
+     20 ?        Ss     0:00 /lib/systemd/systemd-journald
+     40 ?        Ssl    0:00 /usr/sbin/rsyslogd -n -iNONE
+     41 ?        Ss     0:00 /usr/sbin/cron -f
+     42 console  Ss+    0:00 /sbin/agetty -o -p -- \u --noclear --keep-baud console 115200,38400,9600 vt220
+     47 ?        S      0:00 /bin/sh -l
+
+# journalctl
+-- Logs begin at Wed 2026-09-02 17:41:25 MSK, end at Wed 2026-09-02 17:42:38 MSK. --
+Sep 02 17:41:25 hp-260 systemd-journald[18]: Journal started
+Sep 02 17:41:25 hp-260 systemd-journald[18]: Runtime journal (/run/log/journal/cd0bc3568876414395b1a1f97c90ced2) is 8.0M, max 792.5M, 784.5M free.
+Sep 02 17:41:25 hp-260 systemd-sysusers[21]: Creating group systemd-coredump with gid 999.
+Sep 02 17:41:25 hp-260 systemd-sysusers[21]: Creating user systemd-coredump (systemd Core Dumper) with uid 999 and gid 999.
+Sep 02 17:41:25 hp-260 systemd[1]: Starting Flush Journal to Persistent Storage...
+Sep 02 17:41:25 hp-260 systemd[1]: PARSEC-UNIT: [systemd-journald.service] pdp_get_pid(22) return NULL, Success
+Sep 02 17:41:25 hp-260 systemd-journald[18]: Time spent on flushing to /var is 1.663ms for 6 entries.
+Sep 02 17:41:25 hp-260 systemd-journald[18]: System journal (/var/log/journal/cd0bc3568876414395b1a1f97c90ced2) is 8.0M, max 4.0G, 3.9G free.
+Sep 02 17:41:25 hp-260 systemd[1]: PARSEC-UNIT: [systemd-journald.service] first pdpl_get_pid(18) error, Success
+Sep 02 17:41:25 hp-260 systemd[1]: Started Flush Journal to Persistent Storage.
+Sep 02 17:41:25 hp-260 systemd[1]: Started Create System Users.
+Sep 02 17:41:25 hp-260 systemd[1]: Starting Create Static Device Nodes in /dev...
+Sep 02 17:41:25 hp-260 systemd[1]: Started Create Static Device Nodes in /dev.
+Sep 02 17:41:25 hp-260 systemd[1]: Reached target Local File Systems (Pre).
+Sep 02 17:41:25 hp-260 systemd[1]: Reached target Local File Systems.
+Sep 02 17:41:25 hp-260 systemd[1]: Starting Create Volatile Files and Directories...
+Sep 02 17:41:25 hp-260 systemd[1]: Condition check resulted in Commit a transient machine-id on disk being skipped.
+Sep 02 17:41:25 hp-260 systemd[1]: Starting Raise network interfaces...
+Sep 02 17:41:25 hp-260 systemd[1]: Condition check resulted in udev Kernel Device Manager being skipped.
+Sep 02 17:41:25 hp-260 systemd[1]: Started Raise network interfaces.
+Sep 02 17:41:25 hp-260 systemd[1]: Reached target Network.
+Sep 02 17:41:25 hp-260 systemd[1]: Started Create Volatile Files and Directories.
+Sep 02 17:41:25 hp-260 systemd[1]: Condition check resulted in Network Time Synchronization being skipped.
+Sep 02 17:41:25 hp-260 systemd[1]: Reached target System Time Synchronized.
+Sep 02 17:41:25 hp-260 systemd[1]: Starting Update UTMP about System Boot/Shutdown...
+Sep 02 17:41:25 hp-260 systemd[1]: PARSEC: pdp_get_pid(38) return NULL, Success
+Sep 02 17:41:25 hp-260 systemd[1]: PARSEC: pdp_get_pid(1) return NULL, Success
+Sep 02 17:41:25 hp-260 systemd[1]: Started Update UTMP about System Boot/Shutdown.
+Sep 02 17:41:25 hp-260 systemd[1]: Reached target System Initialization.
+Sep 02 17:41:25 hp-260 systemd[1]: Started Daily apt download activities.
+Sep 02 17:41:25 hp-260 systemd[1]: Started Daily apt upgrade and clean activities.
+Sep 02 17:41:25 hp-260 systemd[1]: Started Daily Cleanup of Temporary Directories.
+Sep 02 17:41:25 hp-260 systemd[1]: Reached target Basic System.
+Sep 02 17:41:25 hp-260 systemd[1]: Condition check resulted in Login Service being skipped.
+Sep 02 17:41:25 hp-260 systemd[1]: Started Regular background program processing daemon.
+Sep 02 17:41:25 hp-260 systemd[1]: Starting Permit User Sessions...
+Sep 02 17:41:25 hp-260 systemd[1]: Started Daily rotation of log files.
+Sep 02 17:41:25 hp-260 systemd[1]: Started Daily man-db regeneration.
+Sep 02 17:41:25 hp-260 systemd[1]: Reached target Timers.
+Sep 02 17:41:25 hp-260 systemd[1]: Condition check resulted in getty on tty2-tty6 if dbus and logind are not available being skipped.
+Sep 02 17:41:25 hp-260 cron[39]: (CRON) INFO (pidfile fd = 3)
+Sep 02 17:41:25 hp-260 systemd[1]: Starting System Logging Service...
+```
