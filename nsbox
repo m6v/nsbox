@@ -51,10 +51,26 @@ load() {
     image="${image_ref%%:*}"
     tag="${image_ref#*:}"
     [ "$image" = "$tag" ] && tag="latest"
-    container_name=$(echo "$image" | tr '/' '_')
 
-    temp_dir=$(mktemp -d /var/tmp/nspawn.XXXXXX)
+    # Если $image указывает на файл попытка распаковать его в корень контейнера
+    if [ -f "$image" ]; then
+        image_file=$(basename "$image")
+        container_name=$(echo "${image_file%%.tar*}" | sed 's/[^a-zA-Z0-9.-]/-/g')
+        container_name="${container_name:0:64}"
+        nspawn_file="/etc/systemd/nspawn/${container_name}.nspawn"
+        root_dir="${MACHINES_ROOT}/${container_name}"
+
+        mkdir -p "$root_dir"
+        tar -xf "$image" -C "$root_dir" || { rmdir "$root_dir"; exit 1; }
+        mkdir -p /etc/systemd/nspawn
+        cp -n /etc/systemd/nspawn/config.tmpl "$nspawn_file" 2>/dev/null || true
+        exit 0
+    fi
+
+    container_name=$(echo "$image" | tr '/' '_')
+    nspawn_file="/etc/systemd/nspawn/${container_name}.nspawn"
     root_dir="${MACHINES_ROOT}/${container_name}"
+    temp_dir=$(mktemp -d /var/tmp/nspawn.XXXXXX)
 
     if [ -d "$root_dir" ]; then
         read -p "Каталог $root_dir существует, распаковать поверх? [y/N]: " response
@@ -64,8 +80,8 @@ load() {
     # Скачивание docker-образа и распаковка в корень контейнера
     skopeo --insecure-policy copy docker://"${image}:${tag}" oci:"${temp_dir}:${tag}"
     config_json=$(skopeo inspect --config "oci:${temp_dir}:${tag}")
-    umoci raw unpack --image "${temp_dir}:${tag}" "${root_dir}"
-    rm -rf "${temp_dir}"
+    umoci raw unpack --image "${temp_dir}:${tag}" "$root_dir"
+    rm -rf "$temp_dir"
 
     # Извлечение команды, рабочей директории и пользователя из конфига образа 
     cmd=$(echo "$config_json" | jq -r '((.config.Entrypoint // []) + (.config.Cmd // [])) | join(" ")')
@@ -79,13 +95,12 @@ load() {
     ')
 
     # Запись параметров в конец конфига .nspawn
-    nspawn_file="/etc/systemd/nspawn/${container_name}.nspawn"
     mkdir -p /etc/systemd/nspawn
-    cp -n /etc/systemd/nspawn/config.tmpl "${nspawn_file}" 2>/dev/null || true
-    echo "# Auto-generated parameters from OCI Image Config" >> "${nspawn_file}"
-    echo "Parameters=$cmd" >> "${nspawn_file}"
-    echo "WorkingDirectory=$workdir" >> "${nspawn_file}"
-    echo "$env_lines" >> "${nspawn_file}"
+    cp -n /etc/systemd/nspawn/config.tmpl "$nspawn_file" 2>/dev/null || true
+    echo "# Auto-generated parameters from OCI Image Config" >> "$nspawn_file"
+    echo "Parameters=$cmd" >> "$nspawn_file"
+    echo "WorkingDirectory=$workdir" >> "$nspawn_file"
+    echo "$env_lines" >> "$nspawn_file"
 }
 
 start() {
