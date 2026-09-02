@@ -228,10 +228,51 @@ sed -i '/#.*getty/a console::respawn:/sbin/getty 38400 console' /etc/inittab
 systemd-nspawn -D /tmp/alpine -b
 ```
 
+### debian:trixie-slim с рабочим столом xfce4 и vnc
+```
+# На хосте выполнить
+nsbox load debian:trixie-slim
+nsbox exec debian
+
+# В контейнере выполнить
+apt update
+apt install procps  # ps, top, kill, pkill, free, sysctl
+
+apt install xfce4 tigervnc-standalone-server novnc websockify ca-certificates net-tools
+cat << EOF > /entrypoint.sh
+#!/bin/sh
+rm -f /tmp/.X11-unix/X1
+echo '127.0.0.1 localhost debian' > /etc/hosts
+echo 'debian' > /etc/hostname
+vncserver :1 -geometry 1280x720 -depth 16 -SecurityTypes None --I-KNOW-THIS-IS-INSECURE
+websockify --web=/usr/share/novnc 8080 localhost:5901
+EOF
+chmod +x /entrypoint.sh
+
+mkdir -p /root/.vnc
+echo -e "#\!/bin/sh\nstartxfce4 &" > /root/.vnc/xstartup
+chmod +x /root/.vnc/xstartup
+
+/entrypoint.sh
+```
+
+На хосте в браузере открыть страницу `http://localhost:8080/vnc.html`. Откроется рабочий стол с окном настроек "VNC config", где включить все переключатели.
+
+Не работает буфер обмена, выпонено несколько попыток починить, но не помогли
+```
+#apt install autocutsel  # Что-то для работы буфера обмена, но не помогло
+
+# Была версия, что https-соединение может решить проблему, но не помогло!
+# Создайте SSL-сертификат одной командой
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /root/novnc.pem -out /root/novnc.pem -subj "/CN=localhost"
+# В /entrypoint.sh измените строку запуска
+websockify --web=/usr/share/novnc --cert=/root/novnc.pem 8080 localhost:5901
+```
+
 ### debootstrap
 >TODO Добавить сюда краткое описание
 
-# Использование образов docker
+## Образы docker
 skopeo + umoci 
 
 Статически собранные утилиты для загрузки и распаковки docker-образов
@@ -247,7 +288,7 @@ skopeo --insecure-policy copy docker://alpine:latest oci-archive:/tmp/alpine.tar
 umoci raw unpack --rootless --image /tmp/alpine-oci:latest /var/lib/machines/alpine-root
 ```
 
-### Использование контейнера Astra Linux SE
+## Контейнер Astra Linux SE
 ```
 mount /astra-1.7_x86-64.iso /srv/repo/alse/main
 mkdir -p /var/lib/machines/astra

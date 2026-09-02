@@ -6,11 +6,11 @@ _nsbox_completion() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
     
     # Список доступных команд
-    local commands="list start stop restart execute show destroy"
+    local commands="images load save list start restart stop exec destroy status log config"
 
     # Если предыдущее слово — команда, требующая имя контейнера, получение списка контейнеров nspawn через machinectl
     case "${prev}" in
-        start|stop|restart|exec|execute|show|destroy|ps)
+        load|save|list|start|restart|stop|execute|destroy|status|log|config)
             local containers=$(machinectl list --all --no-legend | awk '{print $1}' | grep -v '^\.host$')
             
             COMPREPLY=( $(compgen -W "${containers}" -- "$cur") )
