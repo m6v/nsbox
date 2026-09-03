@@ -6,10 +6,10 @@ After=network.target
 Type=simple
 
 # Скрипт через exec сам станет главным процессом, systemd будет за ним следить
-ExecStart=/usr/local/bin/nsbox start %i
+ExecStart=/usr/bin/nsbox start %i
 
 # Очистку доверяем systemd, вызывая тот же скрипт с параметром stop
-ExecStopPost=/usr/local/bin/nsbox stop %i
+ExecStopPost=/usr/bin/nsbox stop %i
 
 # Считать коды, связнанные со спецификой остановки контейнеров успешными
 SuccessExitStatus=1 219
