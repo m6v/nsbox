@@ -10,14 +10,17 @@ _nsbox_completion() {
 
     # Если предыдущее слово — команда, требующая имя контейнера, получение списка контейнеров nspawn через machinectl
     case "${prev}" in
-        load|save|list|start|restart|stop|execute|destroy|status|log|config)
+        load|save|list|start|restart|stop|exec|destroy|status|log|config)
             local containers=$(machinectl list --all --no-legend | awk '{print $1}' | grep -v '^\.host$')
+            
+            # Отключаем дефолтные пробелы/слэши Bash
+            compopt -o nospace 2>/dev/null
             
             COMPREPLY=( $(compgen -W "${containers}" -- "$cur") )
             return 0
             ;;
-        list)
-            # После команды 'list' аргументы не требуются
+        list|images)
+            # После команд 'list' и 'images' аргументы не требуются
             return 0
             ;;
     esac

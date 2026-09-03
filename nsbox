@@ -37,7 +37,7 @@ EOF
 }
 
 images() {
-    find "${MACHINES_ROOT}" "${STORAGE_ROOT}" -mindepth 1 -maxdepth 1 -type d -exec basename {} \;
+    find "${MACHINES_ROOT}" -mindepth 1 -maxdepth 1 -type d -exec basename {} \;
 }
 
 list() {
@@ -70,6 +70,9 @@ load() {
 
         mkdir -p "$root_dir"
         tar -xf "$image" -C "$root_dir" || { rmdir "$root_dir"; exit 1; }
+        
+        # Создание корня контейнера, если в архиве был верхний слой оверлея
+        mkdir -p "${MACHINES_ROOT}/${container_name}"
 
         # Восстановление или создание нового конфига контейнера
         mkdir -p /etc/systemd/nspawn
@@ -83,7 +86,7 @@ load() {
         exit 0
     fi
 
-    container_name=$(echo "$image" | tr '/' '_')
+    container_name=$(echo "$image" | tr '/' '-')
     nspawn_file="/etc/systemd/nspawn/${container_name}.nspawn"
     root_dir="${MACHINES_ROOT}/${container_name}"
     temp_dir=$(mktemp -d /var/tmp/nspawn.XXXXXX)
@@ -125,27 +128,18 @@ create() {
         exit 1
     fi
 
-    if [ -d "${MACHINES_ROOT}/${container_name}" ]; then
-        root_dir="${MACHINES_ROOT}/${container_name}"
-    else
-        echo "Создание корневого каталога '${STORAGE_ROOT}/${container_name}'"
-        mkdir -p "${STORAGE_ROOT}/${container_name}/"{lower,upper,work,merged}
-        root_dir="${STORAGE_ROOT}/${container_name}"
-    fi
+    mkdir -p "${MACHINES_ROOT}/${container_name}"
 
     # Создание файла конфигурации
     nspawn_file="/etc/systemd/nspawn/${container_name}.nspawn"
     mkdir -p /etc/systemd/nspawn
     cp -n /etc/systemd/nspawn/config.tmpl "$nspawn_file" 2>/dev/null || true
     sed -i 's/^ *# *Parameters/Parameters/' $nspawn_file
-
-    echo "Создание скрипта инициализации /entrypoint.sh"
-    cp -n "${STORAGE_ROOT}/entrypoint.sh" "${STORAGE_ROOT}/${container_name}/upper"
 }
 
 save() {
     if machinectl show "${container_name}" >/dev/null 2>&1; then
-        echo "Ошибка: Контейнер '${container_name}' запущен, остановите перед сохранением." >&2
+        echo "Ошибка: Контейнер '${container_name}' запущен, остановите перед сохранением" >&2
         exit 1
     fi
 
@@ -169,8 +163,12 @@ start() {
         return 0
     fi
 
+    if [ ! -d "${MACHINES_ROOT}/${container_name}" ]; then
+        echo "Ошибка. Контейнер '${container_name}' не найден"
+        return 1
+    fi
+
     nspawn_file="/etc/systemd/nspawn/${container_name}.nspawn"
-    echo "Создание файла конфигурации $nspawn_file"
     mkdir -p /etc/systemd/nspawn
     cp -n /etc/systemd/nspawn/config.tmpl "${nspawn_file}" 2>/dev/null || true
 
@@ -184,29 +182,28 @@ start() {
             sudo systemctl set-property "nsbox@${container_name}.service" ${properties}
         fi
 
-        echo "Запрос на запуск контейнера '${container_name}' отправлен, смотри логи nsbox log ${container_name}"
+        echo "Запрос на запуск контейнера '${container_name}' отправлен, для вывода логов выполни 'nsbox log ${container_name}'"
         # Флаг --no-block освобождает консоль
         systemctl start --no-block "nsbox@${container_name}.service"
         exit 0
     fi
 
     # Следуюшие команды выполняются только при вызове usr/local/bin/nsbox start %i в юните
-
-    # Если целевого каталога нет, подготовка каталога с оверлеем
-    if [ ! -d "${MACHINES_ROOT}/${container_name}" ]; then
+    MERGED="${MACHINES_ROOT}/${container_name}"
+    umount -l "$MERGED" 2>/dev/null || true
+    # Если каталог контейнера пустой, собираем в него оверлей
+    if ! find "$MERGED" -mindepth 1 -print -quit | grep -q .; then
         LOWER="${STORAGE_ROOT}/${container_name}/lower"
         UPPER="${STORAGE_ROOT}/${container_name}/upper"
         WORK="${STORAGE_ROOT}/${container_name}/work"
-        MERGED="${STORAGE_ROOT}/${container_name}/merged"
 
         # Размонтирование и очистка на случай старта после нештатной остановки
-        umount -l "$MERGED" 2>/dev/null || true
         umount -l "$LOWER" 2>/dev/null || true
         find "$WORK" -mindepth 1 -delete 2>/dev/null || true
-        mkdir -p "$LOWER" "$UPPER" "$WORK" "$MERGED"
-        
-        # Копирование шаблона дефолтной точки входа
-        cp -n "${STORAGE_ROOT}/entrypoint.sh" "$UPPER"
+        mkdir -p "$LOWER" "$UPPER" "$WORK"
+
+        echo "Создание скрипта инициализации /entrypoint.sh"
+        cp -n "${STORAGE_ROOT}/entrypoint.sh" "${STORAGE_ROOT}/${container_name}/upper"
 
         echo "Монтирование корня хоста в $LOWER"
         mount --bind -o ro / "$LOWER"
@@ -214,21 +211,19 @@ start() {
 
         # Монтирование оверлея
         mount -t overlay overlay -o "lowerdir=${LOWER},upperdir=${UPPER},workdir=${WORK}" "$MERGED"
-        ln -s "$MERGED" "${MACHINES_ROOT}/${container_name}"
-    fi
 
-    # Создание необходимых каталогов в upperdir
-    mkdir -p "${STORAGE_ROOT}/${container_name}/upper/etc/systemd/system"
-    # Изоляция machine-id и отключение монтирование дисков хоста (fstab)
-    cp /dev/null "${STORAGE_ROOT}/${container_name}/upper/etc/machine-id"
-    cp /dev/null "${STORAGE_ROOT}/${container_name}/upper/etc/fstab"
-    
-    # Установка basic.target дефолтным юнитом контейнера по умолчанию
-    ln -sf /usr/lib/systemd/system/basic.target \
-    "${STORAGE_ROOT}/${container_name}/upper/etc/systemd/system/default.target"
-    
-    # Отключение попытки перемонтирования корня контейнером
-    ln -sf /dev/null "${STORAGE_ROOT}/${container_name}/upper/etc/systemd/system/systemd-remount-fs.service" || true
+        # Изоляция machine-id и отключение монтирование дисков хоста (fstab)
+        mkdir -p "${STORAGE_ROOT}/${container_name}/upper/etc/systemd/system"
+        cp /dev/null "${STORAGE_ROOT}/${container_name}/upper/etc/machine-id"
+        cp /dev/null "${STORAGE_ROOT}/${container_name}/upper/etc/fstab"
+        
+        # Установка basic.target дефолтным юнитом контейнера по умолчанию
+        ln -sf /usr/lib/systemd/system/basic.target \
+        "${STORAGE_ROOT}/${container_name}/upper/etc/systemd/system/default.target"
+        
+        # Отключение попытки перемонтирования корня контейнером
+        ln -sf /dev/null "${STORAGE_ROOT}/${container_name}/upper/etc/systemd/system/systemd-remount-fs.service" || true
+    fi
 
     echo "Запуск контейнера '${container_name}'..."
     # Передача управления контейнеру (systemd контролирует systemd-nspawn)
@@ -263,19 +258,20 @@ stop() {
     # Следуюшие команды выполняются только при вызове usr/local/bin/nsbox stop %i в юните 
     echo "Очистка ресурсов контейнера '${container_name}'..."
 
-    # Очистка оверлея, если в MACHINES_ROOT каталог контейнера это симлинк на STORAGE_ROOT
-    if [ -L "${MACHINES_ROOT}/${container_name}" ]; then
+
+    # Если каталог контейнера оверлей, размонтировать его
+    fs_type=$(stat -f -c %T "${MACHINES_ROOT}/${container_name}" 2>/dev/null)
+    echo "Размонтирование оверлея ${MACHINES_ROOT}/${container_name}"
+    if [ "$fs_type" = "overlayfs" ] || [ "$fs_type" = "overlay" ]; then
         LOWER="${STORAGE_ROOT}/${container_name}/lower"
         UPPER="${STORAGE_ROOT}/${container_name}/upper"
         WORK="${STORAGE_ROOT}/${container_name}/work"
-        MERGED="${STORAGE_ROOT}/${container_name}/merged"
+        MERGED="${MACHINES_ROOT}/${container_name}"
 
         # Размонтирование и очистка рабочих директорий
         umount -l "$MERGED" 2>/dev/null || true
         umount -l "$LOWER" 2>/dev/null || true
         find "$WORK" -mindepth 1 -delete 2>/dev/null || true
-
-        rm "${MACHINES_ROOT}/${container_name}"
     fi
 
     echo "Готово."
