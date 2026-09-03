@@ -21,7 +21,7 @@ BindReadOnly=/etc/resolv.conf
 # для маскировки настроек сети хоста
 TemporaryFileSystem=/etc/systemd/network
 
-# Разрешение работы подсистемы FUSE в пространстве пользователя
+# Разрешение работы подсистемы FUSE в контейнере
 Bind=/dev/fuse
 
 [Exec]
@@ -29,12 +29,12 @@ Bind=/dev/fuse
 Boot=no
 
 # Кастомные параметры, которые парсятся скриптом запуска
-X-MemoryMax=2G
-X-CPUQuota=25%
-X-TasksMax=100
+# X-MemoryMax=2G
+# X-CPUQuota=25%
+# X-TasksMax=100
 
 # Запуск sh или bash в качестве лидера контейнера может не работать,
 # так как без подключения к псевдотерминалу оболочка завершает работу
 # Используйте шаблон entrypoint.sh, скопировав его в контейнер, или
-# Parameters=/bin/sh -c "trap : TERM INT; /bin/sleep infinity & wait $!"
+# Parameters=/bin/sh -c "trap 'exit 0' TERM INT; /bin/sleep infinity & wait $!"
 

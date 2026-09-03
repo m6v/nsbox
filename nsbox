@@ -21,6 +21,7 @@ $(basename "$0") — это легковесный инструмент для �
   images                 Вывести список образов контейнеров
   list                   Вывести список запущенных контейнеров и юнитов
   load  <image[:tag]>    Загрузить образ с dockerhub или из <image>, если это архив
+  create <container>     Создать контейнер
   save  <container>      Сохранить образ в <container>.tar.gz
   start <container>      Запустить контейнер
   stop  <container>      Остановить контейнер
@@ -43,7 +44,7 @@ list() {
     machinectl --full list 2>/dev/null
     echo ""
     # Если не нужно выводить легенду, добавить --no-legend
-    systemctl list-units "${SERVICE_TEMPLATE}*" --all --no-pager
+    systemctl list-units "nsbox@*" --all --no-pager
 }
 
 load() {
@@ -116,6 +117,30 @@ load() {
     echo "Parameters=$cmd" >> "$nspawn_file"
     echo "WorkingDirectory=$workdir" >> "$nspawn_file"
     echo "$env_lines" >> "$nspawn_file"
+}
+
+create() {
+    if ! expr "$container_name" : '^[a-zA-Z0-9]\{1,\}\([.-][a-zA-Z0-9]\{1,\}\)*$' > /dev/null; then
+        echo "Ошибка. Недопустимое имя контейнера"
+        exit 1
+    fi
+
+    if [ -d "${MACHINES_ROOT}/${container_name}" ]; then
+        root_dir="${MACHINES_ROOT}/${container_name}"
+    else
+        echo "Создание корневого каталога '${STORAGE_ROOT}/${container_name}'"
+        mkdir -p "${STORAGE_ROOT}/${container_name}/"{lower,upper,work,merged}
+        root_dir="${STORAGE_ROOT}/${container_name}"
+    fi
+
+    # Создание файла конфигурации
+    nspawn_file="/etc/systemd/nspawn/${container_name}.nspawn"
+    mkdir -p /etc/systemd/nspawn
+    cp -n /etc/systemd/nspawn/config.tmpl "$nspawn_file" 2>/dev/null || true
+    sed -i 's/^ *# *Parameters/Parameters/' $nspawn_file
+
+    echo "Создание скрипта инициализации /entrypoint.sh"
+    cp -n "${STORAGE_ROOT}/entrypoint.sh" "${STORAGE_ROOT}/${container_name}/upper"
 }
 
 save() {
@@ -230,6 +255,8 @@ stop() {
         echo "Запрос на останов контейнера '${container_name}' отправлен, смотри логи nsbox log ${container_name}"
         # Флаг --no-block возвращает управление в терминал
         systemctl stop --no-block "nsbox@${container_name}.service"
+        # Сброс рантайм-конфигурации службы (для очистки лимитов cgroups2)
+        systemctl revert "nsbox@${container_name}.service"
         exit 0 
     fi
 
@@ -256,7 +283,7 @@ stop() {
 
 restart() {
     echo "Перезапуск контейнера '${container_name}'..."
-    systemctl restart "${SERVICE_TEMPLATE}${container_name}.service"
+    systemctl restart "nsbox@${container_name}.service"
     echo "Готово."
 }
 
@@ -312,21 +339,24 @@ destroy() {
     # Удаление файла конфигурации, если существует
     rm -fv /etc/systemd/nspawn/${container_name}.nspawn
 
+    # Стирание памяти systemd, если контейнер завершился с ошибкой
+    systemctl reset-failed "nsbox@${container_name}.service" 2>/dev/null || true
+
     echo "Готово."
 }
 
 status() {
     if machinectl show "${container_name}" >/dev/null 2>&1; then
-        systemctl status "${SERVICE_TEMPLATE}${container_name}.service" --no-pager -n 0 || true
+        systemctl status "nsbox@${container_name}.service" --no-pager -n 0 || true
         echo ""
 
         machinectl --no-pager status ${container_name}
         echo "          Limits:"
         # Показать лимиты, выровненные по горизонтали как вывод machinectl
-        systemctl show nsbox@"${container_name}".service -p MemoryMax -p TasksMax -p CPUQuotaPerSecUSec | sed "s/^/$(printf '%18s')/"
+        systemctl show "nsbox@${container_name}.service" -p MemoryMax -p TasksMax -p CPUQuotaPerSecUSec | sed "s/^/$(printf '%18s')/"
     else
         echo "Контейнер '${container_name}' не зарегистрирован или выключен"
-        systemctl status "${SERVICE_TEMPLATE}${container_name}.service" --no-pager -n 0 || true
+        systemctl status "nsbox@${container_name}.service" --no-pager -n 0 || true
     fi
 }
 
@@ -348,7 +378,7 @@ shift
 [ "$ACTION" = "--help" ] && ACTION="usage"
 
 case "$ACTION" in
-    images|load|save|list|start|restart|stop|execute|destroy|status|log|config|usage) ;;
+    images|load|create|save|list|start|restart|stop|execute|destroy|status|log|config|usage) ;;
     *)
         echo "Ошибка: неизвестная команда '$ACTION'" >&2
         usage ;;
