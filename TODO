@@ -1,3 +1,31 @@
 - сделать команду для останова всех контейнеров, например, `stop all`
+- подумать над изменением каталога монтирования merged на /var/lib/machines, а /var/lib/nsbox оставить для lowerdir, upperdir и work. Т.е. при создании машины всегда создается каталог в /var/lib/machines, при запуске если он пустой ищем в /var/lib/nsbox слои, если не находим, то создаем. Иначе машины разбросаны по двум каталогам!
+
+при создании:
+mkdir -p "${MACHINES_ROOT}/${container_name}"
+
+при запуске:
+if [ ! -d "${MACHINES_ROOT}/${container_name}" ]; then
+    echo "Ошибка. Контейнер '${container_name}' не найден"
+    exit 1
+fi
+
+if ! find "${MACHINES_ROOT}/${container_name}" -mindepth 1 -print -quit | grep -q .; then
+    # Каталог контейнера пустой, монтируем в него оверлей
+    : "Далее команды монтирования оверлея"
+fi
+
+при останове:
+fs_type=$(stat -f -c %T "${MACHINES_ROOT}/${container_name}" 2>/dev/null)
+
+if [ "$fs_type" = "overlayfs" ] || [ "$fs_type" = "overlay" ]; then
+    echo "Каталог является оверлеем. Размонтируем..."
+    umount -l "${MACHINES_ROOT}/${container_name}" 2>/dev/null || true
+    umount -l "${STORAGE_ROOT}/${container_name}/lower" 2>/dev/null || true
+    find "${STORAGE_ROOT}/${container_name}/work" -mindepth 1 -delete 2>/dev/null || true
+fi
+
+Команду images переделать для поиска только в ${MACHINES_ROOT}
+
 - сделать необходимые подготовительные действия для запуска X11-приложений
 - изменить название моста на nsboxbr0
