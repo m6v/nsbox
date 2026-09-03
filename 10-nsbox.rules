@@ -1,0 +1,20 @@
+polkit.addRule(function(action, subject) {
+    // Доступ к управлению юнитами systemd (контейнерами)
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        subject.isInGroup("nsbox")) {
+        var unit = action.lookup("unit");
+        if (unit && unit.indexOf("nsbox@") === 0) {
+            return polkit.Result.YES;
+        }
+    }
+    // Доступ к machinectl (управление машинами)
+    if (action.id.indexOf("org.freedesktop.machine1.") === 0 &&
+        subject.isInGroup("nsbox")) {
+        return polkit.Result.YES;
+    }
+    // Доступ к importctl (скачивание и импорт образов)
+    if (action.id.indexOf("org.freedesktop.import1.") === 0 &&
+        subject.isInGroup("nsbox")) {
+        return polkit.Result.YES;
+    }
+});

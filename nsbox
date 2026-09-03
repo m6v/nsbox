@@ -30,14 +30,14 @@ $(basename "$0") — это легковесный инструмент для �
   status <container>     Вывести статус контейнера и юнита
   log <container>        Вывести логи службы контейнера
   config <container>     Открыть файл конфигурации контейнера
-  destroy <container>    Уничтожить образ контейнера
+  remove <container>     Удалить образ контейнера
   --help                 Показать эту справку и выйти
 EOF
     exit 1
 }
 
 images() {
-    find "${MACHINES_ROOT}" -mindepth 1 -maxdepth 1 -type d -exec basename {} \;
+    machinectl list-images
 }
 
 list() {
@@ -309,7 +309,7 @@ execute() {
         "$@"
 }
 
-destroy() {
+remove() {
     if machinectl show "${container_name}" >/dev/null 2>&1; then
         echo "Ошибка: Контейнер '${container_name}' запущен, остановите перед удалением." >&2
         exit 1
@@ -374,7 +374,7 @@ shift
 [ "$ACTION" = "--help" ] && ACTION="usage"
 
 case "$ACTION" in
-    images|load|create|save|list|start|restart|stop|execute|destroy|status|log|config|usage) ;;
+    images|load|create|save|list|start|restart|stop|execute|remove|status|log|config|usage) ;;
     *)
         echo "Ошибка: неизвестная команда '$ACTION'" >&2
         usage ;;
