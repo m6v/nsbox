@@ -2,9 +2,10 @@
 
 set -eu
 
-SERVICE_TEMPLATE="nsbox@"        # Шаблон systemd-юнита
-STORAGE_ROOT=/var/lib/nsbox      # Хранилище с развернутыми образами оверлеев 
-MACHINES_ROOT=/var/lib/machines  # Стандартный путь machinectl
+SERVICE_TEMPLATE="nsbox@"              # Шаблон systemd-юнита
+STORAGE_ROOT="/var/lib/nsbox"          # Хранилище с развернутыми образами оверлеев 
+MACHINES_ROOT="/var/lib/machines"      # Стандартный путь machinectl
+NSPAWN_CONF_DIR="/etc/systemd/nspawn"  # Стандартный путь к каталогу с конфигами
 
 # Перезапуск от root, если скрипт запущен от обычного пользователя
 if [ "$(id -u)" -ne 0 ]; then
@@ -123,11 +124,9 @@ load() {
 }
 
 create() {
-    if ! expr "$container_name" : '^[a-zA-Z0-9]\{1,\}\([.-][a-zA-Z0-9]\{1,\}\)*$' > /dev/null; then
-        echo "Ошибка. Недопустимое имя контейнера"
-        exit 1
-    fi
+    echo "$container_name" | grep -Eq '^[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*$' || { echo "Ошибка. Недопустимое имя контейнера"; exit 1; }
 
+    # Создание корня образа
     mkdir -p "${MACHINES_ROOT}/${container_name}"
 
     # Создание файла конфигурации
@@ -138,7 +137,7 @@ create() {
 }
 
 save() {
-    if machinectl show "${container_name}" >/dev/null 2>&1; then
+    if machinectl show "$container_name" >/dev/null 2>&1; then
         echo "Ошибка: Контейнер '${container_name}' запущен, остановите перед сохранением" >&2
         exit 1
     fi
@@ -148,7 +147,7 @@ save() {
     elif [ -d "${MACHINES_ROOT}/${container_name}" ]; then
         root_dir="${MACHINES_ROOT}/${container_name}"
     fi
-    
+
     if [ -n "$root_dir" ]; then
         cp "/etc/systemd/nspawn/${container_name}.nspawn" "$root_dir" || true
         tar -czf "${container_name}.tar.gz" -C "$root_dir" .
@@ -157,8 +156,7 @@ save() {
 }
 
 start() {
-    # Проверка запущен ли контейнер
-    if machinectl show "${container_name}" >/dev/null 2>&1; then
+    if machinectl show "$container_name" >/dev/null 2>&1; then
         echo "Контейнер '${container_name}' уже запущен."
         return 0
     fi
@@ -238,7 +236,7 @@ start() {
 stop() {
     # Проверка способа запуска (вручную из терминала или через systemd)
     if [ -t 0 ]; then
-        # Проверка запущен ли контейнер
+        # Следующие команды выполняются при запуске nsbox из терминала
         if ! machinectl show "${container_name}" >/dev/null 2>&1; then
             echo "Контейнер '${container_name}' не запущен."
             return 0
@@ -255,18 +253,17 @@ stop() {
         exit 0 
     fi
 
-    # Следуюшие команды выполняются только при вызове usr/local/bin/nsbox stop %i в юните 
+    # Следуюшие команды выполняются при запуске nsbox stop %i из юнита
     echo "Очистка ресурсов контейнера '${container_name}'..."
 
 
-    # Если каталог контейнера оверлей, размонтировать его
-    fs_type=$(stat -f -c %T "${MACHINES_ROOT}/${container_name}" 2>/dev/null)
-    echo "Размонтирование оверлея ${MACHINES_ROOT}/${container_name}"
+    # Если каталог контейнера это оверлей, размонтировать его
+    MERGED="${MACHINES_ROOT}/${container_name}"
+    fs_type=$(stat -f -c %T "$MERGED" 2>/dev/null)
+    echo "Размонтирование оверлея ${MERGED}"
     if [ "$fs_type" = "overlayfs" ] || [ "$fs_type" = "overlay" ]; then
         LOWER="${STORAGE_ROOT}/${container_name}/lower"
-        UPPER="${STORAGE_ROOT}/${container_name}/upper"
         WORK="${STORAGE_ROOT}/${container_name}/work"
-        MERGED="${MACHINES_ROOT}/${container_name}"
 
         # Размонтирование и очистка рабочих директорий
         umount -l "$MERGED" 2>/dev/null || true
