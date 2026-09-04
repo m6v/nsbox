@@ -3,10 +3,9 @@
 - `nsbox` - скрипт для управления контейнерами `systemd-nspawn`
 - `nsbox@.service` - шаблон службы для запуска контейнеров `systemd-nspawn`
 - `d2r` - скрипт для создания контейнеров на базе образов docker
-- `nsbox.sh` и `nsinit.sh` - старая реализация контейнеров в чистом bash, без использования systemd-nspawn
+- `nsbox.sh` и `nsinit.sh` - старая реализация контейнеров на чистом bash, без использования `systemd-nspawn`.
 
-Для использования `nsbox` создают группу `nsbox`. Пользователям этой группы разрешено управлять службой `nsbox@.service` без повышения привилегий.
-
+Для использования `nsbox` без sudo, добавить пользователя в группу `nsbox`. Пользователям этой группы разрешено управлять службой `nsbox@.service` без повышения привилегий.
 
 Пи запуске nsbox проверяет наличие каталога `/var/lib/machines/<container_name>` и при отсутствии создает оверлей в каталоге `/var/lib/nsbox/<container_name>` и обычной структурой подкаталогов: `lower`, `upper`, `work`, `merged`. В `lower` монтируется корень хоста. После создания оверлея в /var/lib/machines/ создается симлинк на каталог `merged`
 
@@ -276,9 +275,7 @@ websockify --web=/usr/share/novnc --cert=/root/novnc.pem 8080 localhost:5901
 >TODO Добавить сюда краткое описание
 
 ## Образы docker
-skopeo + umoci 
-
-Статически собранные утилиты для загрузки и распаковки docker-образов
+Статически собранные утилиты `skopeo` и `umoci` для загрузки и распаковки docker-образов
 [https://github.com/lework/skopeo-binary/releases]
 [https://github.com/opencontainers/umoci/releases]
 
@@ -287,7 +284,7 @@ skopeo + umoci
 skopeo --insecure-policy copy docker://alpine:latest oci:/tmp/alpine:latest
 skopeo --insecure-policy copy docker://alpine:latest oci-archive:/tmp/alpine.tar:alpine:latest
 
-# Флаг --rootless, если не хотим назначать на распаковываемые файлы права root'а
+# Флаг --rootless, чтобы не назначать на распаковываемые файлы права root'а
 umoci raw unpack --rootless --image /tmp/alpine-oci:latest /var/lib/machines/alpine-root
 ```
 

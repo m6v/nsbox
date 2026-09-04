@@ -9,7 +9,6 @@ NFTABLES_CONF       = $(DESTDIR)$(PREFIX)/nftables.conf
 NFTABLES_DIR        = $(DESTDIR)$(PREFIX)/nftables.d
 NSBOX_DIR           = $(DESTDIR)/var/lib/nsbox
 POLKIT_DIR          = $(DESTDIR)/etc/polkit-1/rules.d
-SUDOERSDIR          = $(DESTDIR)/etc/sudoers.d
 
 BIN_DIR             = $(DESTDIR)$(EXEC_PREFIX)/bin
 BASH_COMPLETION_DIR = $(DESTDIR)$(EXEC_PREFIX)/share/bash-completion/completions
@@ -17,12 +16,12 @@ BASH_COMPLETION_DIR = $(DESTDIR)$(EXEC_PREFIX)/share/bash-completion/completions
 INSTALL_DATA = install -m 0644 -D
 INSTALL_EXEC = install -m 0755 -D
 
-.PHONY: all install install-bin install-completion install-service install-network install-templates install-nftables install-polkit-rules install-sudoers reload check deb clean help
+.PHONY: all install install-bin install-completion install-service install-network install-templates install-nftables install-polkit-rules reload check deb postinst clean help
 
 all: help
 
 # Установка всех компонентов, настройка nftables и перезапуск службы
-install: install-bin install-completion install-service install-network install-templates install-nftables install-polkit-rules install-sudoers reload
+install: install-bin install-completion install-service install-network install-templates install-nftables install-polkit-rules reload
 
 # Установка утилит управления
 install-bin:
@@ -61,10 +60,6 @@ install-nftables:
 install-polkit-rules:
 	$(INSTALL_DATA) 10-nsbox.rules $(POLKIT_DIR)/10-nsbox.rules
 
-# Установка прав для утилиты nsbox на монтирование и размонтирование OverlayFS
-install-sudoers:
-	install -m 0440 -D nsbox.sudoers $(SUDOERSDIR)/nsbox
-
 # Проверка синтаксиса изолированного модуля nftables
 check:
 	-/usr/sbin/nft --check --file nsbox-nat.conf
@@ -99,6 +94,10 @@ deb: clean check
 	@dpkg-deb --root-owner-group --build $(TMP_BUILD_DIR) $(PKG_NAME)_$(PKG_VER)_$(PKG_ARCH).deb
 	@rm -rf $(TMP_BUILD_DIR)
 	@echo "Пакет успешно собран: $(PKG_NAME)_$(PKG_VER)_$(PKG_ARCH).deb"
+
+# Вызов постустановочного скрипта, который будет использоваться при установке пакета
+postinst:
+	@$(CURDIR)/postinst configure
 
 # Очистка временных файлов сборки и старых пакетов
 clean:

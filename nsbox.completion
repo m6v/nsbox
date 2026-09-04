@@ -1,36 +1,34 @@
 _nsbox_completion() {
     local cur prev
-    # Текущее слово под курсором
     cur="${COMP_WORDS[COMP_CWORD]}"
-    # Предыдущее слово в строке
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    
-    # Список доступных команд
-    local commands="images load save list start restart stop exec destroy status log config"
+    local commands="images load save list start restart stop exec remove status log config"
 
-    # Если предыдущее слово — команда, требующая имя контейнера, получение списка контейнеров nspawn через machinectl
     case "${prev}" in
-        load|save|list|start|restart|stop|exec|remove|status|log|config)
-            local containers=$(machinectl list --all --no-legend | awk '{print $1}' | grep -v '^\.host$')
-            
-            # Отключаем дефолтные пробелы/слэши Bash
+        # Команды, для которых нужны только запущенные контейнеры
+        stop|restart|exec)
+            local running_containers=$(machinectl list --all --no-legend | awk '{print $1}' | grep -v '^\.host$')
             compopt -o nospace 2>/dev/null
-            
-            COMPREPLY=( $(compgen -W "${containers}" -- "$cur") )
+            COMPREPLY=( $(compgen -W "${running_containers}" -- "$cur") )
             return 0
             ;;
+            
+        # Команды, для которых подходят все контейнеры (образы)
+        load|log|save|start|remove|status|config)
+            local all_containers=$(machinectl list-images --no-legend | awk '{print $1}')
+            compopt -o nospace 2>/dev/null
+            COMPREPLY=( $(compgen -W "${all_containers}" -- "$cur") )
+            return 0
+            ;;
+            
         list|images)
-            # После команд 'list' и 'images' аргументы не требуются
             return 0
             ;;
     esac
 
-    # Если вводится самый первый аргумент — дополняем основную команду
     if [ $COMP_CWORD -eq 1 ]; then
         COMPREPLY=( $(compgen -W "${commands}" -- "$cur") )
         return 0
     fi
 }
-
-# Привязка автодополнения к имени утилиты nsbox
 complete -F _nsbox_completion nsbox

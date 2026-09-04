@@ -1,10 +1,23 @@
 #!/bin/sh
 set -e
 
-NFTABLES_CONF="/etc/nftables.conf"
+NSBOX_DIR="/var/lib/nsbox"
 NFTABLES_DIR="/etc/nftables.d"
+NFTABLES_CONF="/etc/nftables.conf"
 
 if [ "$1" = "configure" ]; then
+    echo "Выполнение постинсталляционных настроек..."
+    /usr/sbin/groupadd -rf "nsbox"
+    
+    mkdir -p $NSBOX_DIR
+    chown -R root:nsbox $NSBOX_DIR
+    chmod -R 770 $NSBOX_DIR
+    # Установка SGID, чтобы создаваемые объекты автоматически наследовали группу nsbox
+    find $NSBOX_DIR -type d -exec chmod g+s {} +
+    
+    # Пока сетевые настройки не трогаем!
+    exit 0
+    
     # Если главного конфига нет, создать базовый скелет
     if [ ! -f "$NFTABLES_CONF" ]; then
         mkdir -p "$(dirname "$NFTABLES_CONF")"

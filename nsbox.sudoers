@@ -1,2 +1,0 @@
-# Права для утилиты nsbox на монтирование и размонтирование OverlayFS
-%nsbox ALL=(ALL) NOPASSWD: /usr/bin/mount -t overlay *, /usr/bin/umount *
