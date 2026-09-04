@@ -1,0 +1,7 @@
+%nsbox ALL=(root) NOPASSWD: /usr/bin/nsenter
+%nsbox ALL=(root) NOPASSWD: /bin/mkdir -p /var/lib/machines/*
+%nsbox ALL=(root) NOPASSWD: /bin/rmdir /var/lib/machines/*
+%nsbox ALL=(root) NOPASSWD: /bin/rm -rf /var/lib/machines/*
+%nsbox ALL=(root) NOPASSWD: /bin/cp -n /usr/share/nsbox/* /etc/systemd/nspawn/*
+%nsbox ALL=(root) NOPASSWD: /bin/chgrp * /etc/systemd/nspawn/*.nspawn
+%nsbox ALL=(root) NOPASSWD: /bin/chmod * /etc/systemd/nspawn/*.nspawn

@@ -36,5 +36,5 @@ Boot=no
 # Запуск sh или bash в качестве лидера контейнера может не работать,
 # так как без подключения к псевдотерминалу оболочка завершает работу
 # Используйте шаблон entrypoint.sh, скопировав его в контейнер, или
-# Parameters=/bin/sh -c "trap 'exit 0' TERM INT; /bin/sleep infinity & wait $!"
+Parameters=/bin/sh -c "trap 'exit 0' TERM INT; /bin/sleep infinity & wait $!"
 

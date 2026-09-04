@@ -10,6 +10,7 @@ MACHINES_DIR        = $(DESTDIR)/var/lib/machines
 STORAGE_DIR         = $(DESTDIR)/var/lib/nsbox
 SHARE_DIR           = $(DESTDIR)/usr/share/nsbox
 POLKIT_DIR          = $(DESTDIR)/etc/polkit-1/rules.d
+SUDOERS_DIR         = $(DESTDIR)/etc/sudoers.d
 
 
 BIN_DIR             = $(DESTDIR)$(EXEC_PREFIX)/bin
@@ -18,12 +19,12 @@ BASH_COMPLETION_DIR = $(DESTDIR)$(EXEC_PREFIX)/share/bash-completion/completions
 INSTALL_DATA = install -m 0644 -D
 INSTALL_EXEC = install -m 0755 -D
 
-.PHONY: all install install-bin install-completion install-service install-network install-templates install-nftables install-polkit-rules reload check deb postinst clean help
+.PHONY: all install install-bin install-completion install-service install-network install-templates install-nftables install-polkit-rules install-sudoers-rules reload create-storage-dir check deb postinst clean help
 
 all: help
 
 # Установка всех компонентов, настройка nftables и перезапуск службы
-install: install-bin install-completion install-service install-network install-templates install-nftables install-polkit-rules reload
+install: install-bin install-completion install-service install-network install-templates install-nftables install-polkit-rules install-sudoers-rules reload create-storage-dir postinst
 
 # Установка утилит управления
 install-bin:
@@ -61,6 +62,13 @@ install-nftables:
 # Установка правил polkit
 install-polkit-rules:
 	$(INSTALL_DATA) 10-nsbox.rules $(POLKIT_DIR)/10-nsbox.rules
+
+install-sudoers-rules:
+	$(INSTALL_DATA) 10-nsbox-sudoers $(SUDOERS_DIR)/10-nsbox-sudoers
+
+# Создание каталога для оверлея
+create-storage-dir:
+	install -d -m 2770 $(DESTDIR)$(STORAGE_DIR)
 
 # Проверка синтаксиса изолированного модуля nftables
 check:

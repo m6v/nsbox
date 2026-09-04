@@ -2,14 +2,15 @@
 
 set -eu
 
-TEMPLATES_DIR="/usr/share/nsbox"       # Каталог для шаблонов конфига и скрипта запуска
-STORAGE_DIR="/var/lib/nsbox"          # Хранилище с развернутыми образами оверлеев 
-MACHINES_DIR="/var/lib/machines"      # Стандартный путь machinectl
+NSPAWN_DIR="/etc/systemd/nspawn"  # Каталог для конфигурационных файлов
+TEMPLATES_DIR="/usr/share/nsbox"  # Каталог для шаблонов конфига и скрипта запуска
+STORAGE_DIR="/var/lib/nsbox"      # Хранилище с развернутыми образами оверлеев 
+MACHINES_DIR="/var/lib/machines"  # Стандартный путь machinectl
 
 # Перезапуск от root, если скрипт запущен от обычного пользователя
-if [ "$(id -u)" -ne 0 ]; then
-    exec sudo "$0" "$@"
-fi
+# if [ "$(id -u)" -ne 0 ]; then
+#     exec sudo "$0" "$@"
+# fi
 
 usage() {
     cat << EOF
@@ -59,7 +60,7 @@ load() {
         image_file=$(basename "$image")
         container_name=$(echo "${image_file%%.tar*}" | sed 's/[^a-zA-Z0-9.-]/-/g')
         container_name="${container_name:0:64}"
-        nspawn_file="${MACHINES_DIR}/${container_name}.nspawn"
+        nspawn_file="${NSPAWN_DIR}/${container_name}.nspawn"
 
         # Определение корня контейнера по наличию каталога upper в архиве
         if tar -tf "$image" | grep -Eq '^(\./)?upper/$'; then
@@ -76,7 +77,7 @@ load() {
 
         # Восстановление или создание нового конфига контейнера
         if [ -f "${root_dir}/${container_name}.nspawn" ]; then
-            cp -i "${root_dir}/${container_name}.nspawn" "$MACHINES_DIR"
+            cp -i "${root_dir}/${container_name}.nspawn" "$NSPAWN_DIR"
             rm "${root_dir}/${container_name}.nspawn"
         else
             cp -n "${TEMPLATES_DIR}/config.tmpl" "$nspawn_file" 2>/dev/null || true
@@ -86,7 +87,7 @@ load() {
     fi
 
     container_name=$(echo "$image" | tr '/' '-')
-    nspawn_file="${MACHINES_DIR}/${container_name}.nspawn"
+    nspawn_file="${NSPAWN_DIR}/${container_name}.nspawn"
     root_dir="${MACHINES_DIR}/${container_name}"
     temp_dir=$(mktemp -d /var/tmp/nspawn.XXXXXX)
 
@@ -123,11 +124,14 @@ load() {
 create() {
     echo "$container_name" | grep -Eq '^[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*$' || { echo "Ошибка. Недопустимое имя контейнера"; exit 1; }
     # Создание корня образа
-    mkdir -p "${MACHINES_DIR}/${container_name}"
+    sudo mkdir -p "${MACHINES_DIR}/${container_name}"
     # Создание файла конфигурации
-    nspawn_file="${MACHINES_DIR}/${container_name}.nspawn"
-    cp -n "${TEMPLATES_DIR}/config.tmpl" "$nspawn_file" 2>/dev/null || true
-    sed -i "s/^ *# *Parameters/Parameters/" "$nspawn_file"
+    nspawn_file="${NSPAWN_DIR}/${container_name}.nspawn"
+    sudo cp -n "${TEMPLATES_DIR}/config.tmpl" "$nspawn_file" || true
+    sudo chgrp nsbox "$nspawn_file"
+    sudo chmod 664 "$nspawn_file"
+    # Раскомментирование параметра с командой запуска
+    # sed -i "s/^ *# *Parameters/Parameters/" "$nspawn_file"
 }
 
 save() {
@@ -144,7 +148,7 @@ save() {
     fi
 
     if [ -n "$root_dir" ]; then
-        cp "${MACHINES_DIR}/${container_name}.nspawn" "$root_dir" || true
+        cp "${NSPAWN_DIR}/${container_name}.nspawn" "$root_dir" || true
         tar -czf "${container_name}.tar.gz" -C "$root_dir" .
         rm "$root_dir/${container_name}.nspawn" || true
     fi
@@ -156,15 +160,15 @@ start() {
         return 0
     fi
 
-    if [ ! -d "${MACHINES_DIR}/${container_name}" ]; then
-        echo "Ошибка. Контейнер '${container_name}' не найден"
+    if ! machinectl image-status "$container_name" >/dev/null 2>&1; then
+        echo "Ошибка. Образ контейнера '${container_name}' не найден"
         return 1
     fi
 
     # Проверка способа запуска (вручную из терминала или через systemd)
     if [ -t 0 ]; then
         # Чтение лимитов cgroupsv2 из конфига
-        nspawn_file="${MACHINES_DIR}/${container_name}.nspawn"
+        nspawn_file="${NSPAWN_DIR}/${container_name}.nspawn"
         properties=$(awk '/^X-(MemoryMax|CPUQuota|TasksMax)=/ {sub(/^X-/, ""); printf "%s ", $0}' "${nspawn_file}")
         if [ -n "$properties" ]; then
             echo "Применение лимитов ${properties}"
@@ -236,11 +240,11 @@ stop() {
         # Отправка сигнала SIGTERM лидеру контейнера
         machinectl kill --kill-who=leader --signal=SIGTERM "$container_name"
 
-        echo "Останов контейнера '${container_name}' инициирован, для вывода логов выполни 'nsbox log ${container_name}'"
         # Флаг --no-block возвращает управление в терминал
         systemctl stop --no-block "nsbox@${container_name}.service"
         # Сброс рантайм-конфигурации службы (для очистки лимитов cgroups2)
         systemctl revert "nsbox@${container_name}.service"
+        echo "Останов контейнера '${container_name}' инициирован, для вывода логов выполни 'nsbox log ${container_name}'"
         exit 0 
     fi
 
@@ -285,7 +289,7 @@ execute() {
     if [ $# -eq 0 ]; then set -- /bin/sh -l; fi
 
     # Установка DISPLAY и XAUTHORITY нужна только для запуска графических приложений
-    exec nsenter --target "$pid" --mount --uts --ipc --net --pid -- \
+    exec sudo nsenter --target "$pid" --mount --uts --ipc --net --pid -- \
         env -i \
         TERM="${TERM:-xterm-256color}" \
         PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
@@ -297,6 +301,7 @@ execute() {
 }
 
 remove() {
+    # Проверить и убрать, т.к. работающий контейнер не даст удалить machinectl remove!
     if machinectl show "$container_name" >/dev/null 2>&1; then
         echo "Ошибка: Контейнер '${container_name}' запущен, остановите перед удалением." >&2
         exit 1
@@ -308,19 +313,10 @@ remove() {
         exit 0
     fi
 
-    # Чтобы обезопасить удаление преобразуем container_name через systemd-escape, 
-    # если содержит спецсимволы, слэши или точки, вернет код ошибки
-    systemd-escape --mangle "$container_name" >/dev/null 2>&1
-    if [ $? -ne 0 ]; then
-        exit 1
-    fi
-
-    # Удаление каталогов контейнера, если существуют
-    rm -rfv "${MACHINES_DIR}/${container_name}"
-    rm -rfv "${STORAGE_DIR}/${container_name}"
-
-    # Удаление файла конфигурации, если существует
-    rm -fv "${MACHINES_DIR}/${container_name}.nspawn"
+    # Удаление каталога с образом контейнера с помощью machinectl, чтобы мог выполнять пользователь группы nsbox,
+    # каталог ${STORAGE_DIR}/${container_name} пытаемся удалить только после успешного удаления образа контейнера!
+    machinectl remove "$container_name" && rm -rfv "${STORAGE_DIR}/${container_name}"
+    rm -f "${NSPAWN_DIR}/${container_name}.nspawn"
 
     # Стирание памяти systemd, если контейнер завершился с ошибкой
     systemctl reset-failed "nsbox@${container_name}.service" 2>/dev/null || true
@@ -348,7 +344,7 @@ log() {
 }
 
 config() {
-    ${EDITOR:-nano} "${MACHINES_DIR}/${container_name}.nspawn"
+    ${EDITOR:-nano} "${NSPAWN_DIR}/${container_name}.nspawn"
 }
 
 # Проверка минимального количества аргументов

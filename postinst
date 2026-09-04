@@ -1,20 +1,25 @@
 #!/bin/sh
 set -e
 
+GROUP_NAME="nsbox"
 NSBOX_DIR="/var/lib/nsbox"
 NFTABLES_DIR="/etc/nftables.d"
 NFTABLES_CONF="/etc/nftables.conf"
 
 if [ "$1" = "configure" ]; then
     echo "Выполнение постинсталляционных настроек..."
-    /usr/sbin/groupadd -rf "nsbox"
-    
-    mkdir -p $NSBOX_DIR
-    chown -R root:nsbox $NSBOX_DIR
-    chmod -R 770 $NSBOX_DIR
-    # Установка SGID, чтобы создаваемые объекты автоматически наследовали группу nsbox
-    find $NSBOX_DIR -type d -exec chmod g+s {} +
-    
+    /usr/sbin/groupadd -rf "$GROUP_NAME"
+
+    # Настройка владельца и права SGID
+    chown -R root:"$GROUP_NAME" "$NSBOX_DIR"
+    chmod 2770 "$NSBOX_DIR"
+    # Настройка наследования прав для будущих объектов в $NSBOX_DIR,
+    # чтобы пользователи из группы $GROUP_NAME могли их удалять
+    setfacl -m "g:${GROUP_NAME}:rwx" "$NSBOX_DIR"
+    setfacl -d -m "g:${GROUP_NAME}:rwx" "$NSBOX_DIR"
+    setfacl -d -m "u::rwx" "$NSBOX_DIR"
+    setfacl -d -m "m::rwx" "$NSBOX_DIR"
+
     # Пока сетевые настройки не трогаем!
     exit 0
     

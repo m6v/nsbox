@@ -1,8 +1,8 @@
 Package: nsbox
-Version: 0.9
+Version: 0.10
 Section: utils
 Priority: optional
 Architecture: amd64
 Maintainer: Sergey Maksimov <m6v@mail.ru>
-Depends: systemd-container, nftables, jq
+Depends: systemd-container, nftables, acl, jq
 Description: systemd-nspawn containers control tool
