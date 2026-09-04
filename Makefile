@@ -4,11 +4,13 @@ EXEC_PREFIX   ?= /usr
 
 SYSTEMD_DIR         = $(DESTDIR)$(PREFIX)/systemd/system
 NETWORK_DIR         = $(DESTDIR)$(PREFIX)/systemd/network
-NSPAWN_DIR          = $(DESTDIR)$(PREFIX)/systemd/nspawn
 NFTABLES_CONF       = $(DESTDIR)$(PREFIX)/nftables.conf
 NFTABLES_DIR        = $(DESTDIR)$(PREFIX)/nftables.d
-NSBOX_DIR           = $(DESTDIR)/var/lib/nsbox
+MACHINES_DIR        = $(DESTDIR)/var/lib/machines
+STORAGE_DIR         = $(DESTDIR)/var/lib/nsbox
+SHARE_DIR           = $(DESTDIR)/usr/share/nsbox
 POLKIT_DIR          = $(DESTDIR)/etc/polkit-1/rules.d
+
 
 BIN_DIR             = $(DESTDIR)$(EXEC_PREFIX)/bin
 BASH_COMPLETION_DIR = $(DESTDIR)$(EXEC_PREFIX)/share/bash-completion/completions
@@ -45,8 +47,8 @@ install-network:
 
 # Установка шаблонов
 install-templates:
-	$(INSTALL_DATA) config.tmpl $(NSPAWN_DIR)/config.tmpl
-	$(INSTALL_EXEC) entrypoint.sh $(NSBOX_DIR)/entrypoint.sh
+	$(INSTALL_DATA) config.tmpl $(SHARE_DIR)/config.tmpl
+	$(INSTALL_EXEC) entrypoint.sh $(SHARE_DIR)/entrypoint.sh
 
 # Установка модуля nsbox-nat.conf и привязка include (только при живой установке)
 install-nftables:

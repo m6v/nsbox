@@ -1,6 +1,6 @@
 - сделать команду для останова всех контейнеров, например, `stop all`
+- возможно копировать entrypoint.sh в корень контейнера не нужно, пусть это делает пользователь
 - сделать необходимые подготовительные действия для запуска X11-приложений
-- изменить название моста на nsboxbr0
 - заменить кастомный импорт из tar.gz на machinectl import-tar, например
 ```
 machinectl import-tar /path/to/my-rootfs.tar.gz ubuntu-test
@@ -8,34 +8,7 @@ machinectl import-tar /path/to/my-rootfs.tar.gz ubuntu-test
 Если имя контейнера (ubuntu-test) не указать, machinectl автоматически сгенерирует его, взяв за основу имя файла и отрезав расширения (из my-rootfs.tar.gz получится контейнер с именем my-rootfs)
 
 
-
-- сделать группу nsbox и настроить для нее polkit правила для использлования machinectl b systemctl
-Создайте или дополните файл /etc/polkit-1/rules.d/10-nsbox.rules:
-```
-polkit.addRule(function(action, subject) {
-    // 1. Проверяем, что действие относится к управлению юнитами systemd
-    if (action.id == "org.freedesktop.systemd1.manage-units" &&
-        subject.isInGroup("nsbox")) {
-        
-        var unit = action.lookup("unit");
-        
-        // Разрешаем управлять ТОЛЬКО контейнерами nspawn (шаблоны systemd-nspawn@...)
-        if (unit && unit.indexOf("systemd-nspawn@") === 0) {
-            return polkit.Result.YES;
-        }
-    }
-
-    // 2. Также оставляем доступ к machinectl из Варианта 1
-    if (action.id.indexOf("org.freedesktop.machine1.") === 0 &&
-        subject.isInGroup("nsbox")) {
-        return polkit.Result.YES;
-    }
-});
-```
-
 Если пользователям понадобится смотреть логи контейнеров через journalctl -u systemd-nspawn@mycontainer, им потребуются права на чтение логов. Чтобы дать им этот доступ без sudo, достаточно просто добавить пользователей в системную группу systemd-journal:
 ```
 sudo usermod -aG systemd-journal имя_пользователя
 ```
-
-Разрешить пользователям группы nsbox выполнять команду mount с флагом -t overlay
